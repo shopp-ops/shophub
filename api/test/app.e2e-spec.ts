@@ -22,7 +22,7 @@ describe('AppController (e2e)', () => {
     app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.init();
-    await app.getHttpAdapter().getInstance().ready();
+    await (app.getHttpAdapter().getInstance() as { ready(): Promise<void> }).ready();
   }, 60_000);
 
   afterAll(async () => {

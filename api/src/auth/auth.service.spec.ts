@@ -64,9 +64,7 @@ describe('AuthService', () => {
     it('throws ConflictException when email already registered', async () => {
       usersService.findByEmail.mockResolvedValue(makeUser());
 
-      await expect(
-        service.register({ email: 'a@b.com', password: 'password123' }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.register({ email: 'a@b.com', password: 'password123' })).rejects.toThrow(ConflictException);
     });
   });
 
@@ -84,18 +82,16 @@ describe('AuthService', () => {
     it('throws UnauthorizedException for unknown email', async () => {
       usersService.findByEmail.mockResolvedValue(null);
 
-      await expect(
-        service.login({ email: 'nobody@b.com', password: 'password123' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login({ email: 'nobody@b.com', password: 'password123' })).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('throws UnauthorizedException for wrong password', async () => {
       const passwordHash = await bcrypt.hash('correct-pass', BCRYPT_ROUNDS);
       usersService.findByEmail.mockResolvedValue(makeUser({ passwordHash }));
 
-      await expect(
-        service.login({ email: 'a@b.com', password: 'wrong-pass' }),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.login({ email: 'a@b.com', password: 'wrong-pass' })).rejects.toThrow(UnauthorizedException);
     });
   });
 });
