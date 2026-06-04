@@ -5,6 +5,8 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
+export const BCRYPT_ROUNDS = 12;
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -16,7 +18,7 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already registered');
 
-    const passwordHash = await bcrypt.hash(dto.password, 12);
+    const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
     const user = await this.usersService.create(dto.email, passwordHash);
     return { id: user.id, email: user.email };
   }

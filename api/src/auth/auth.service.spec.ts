@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
 import { User } from '../users/user.entity';
 import { UsersService } from '../users/users.service';
-import { AuthService } from './auth.service';
+import { BCRYPT_ROUNDS, AuthService } from './auth.service';
 
 const makeUser = (overrides: Partial<User> = {}): User =>
   Object.assign(new User(), {
@@ -72,7 +72,7 @@ describe('AuthService', () => {
 
   describe('login', () => {
     it('returns accessToken for valid credentials', async () => {
-      const passwordHash = await bcrypt.hash('password123', 10);
+      const passwordHash = await bcrypt.hash('password123', BCRYPT_ROUNDS);
       usersService.findByEmail.mockResolvedValue(makeUser({ passwordHash }));
 
       const result = await service.login({ email: 'a@b.com', password: 'password123' });
@@ -90,7 +90,7 @@ describe('AuthService', () => {
     });
 
     it('throws UnauthorizedException for wrong password', async () => {
-      const passwordHash = await bcrypt.hash('correct-pass', 10);
+      const passwordHash = await bcrypt.hash('correct-pass', BCRYPT_ROUNDS);
       usersService.findByEmail.mockResolvedValue(makeUser({ passwordHash }));
 
       await expect(
