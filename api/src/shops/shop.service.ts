@@ -1,19 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Shop } from './shop.entity';
 import { CreateShopDto } from './dto/create-shop.dto';
+import { UpdateShopDto } from './dto/update-shop.dto';
+import { Shop } from './shop.entity';
 
 @Injectable()
 export class ShopService {
   constructor(@InjectRepository(Shop) private repo: Repository<Shop>) {}
 
-  findById(id: string): Promise<Shop | null> {
-    return this.repo.findOneBy({ id });
-  }
-
-  findByIdForUser(id: string, userId: string): Promise<Shop | null> {
-    return this.repo.findOneBy({ id, userId });
+  async findByIdForUser(id: string, userId: string): Promise<Shop> {
+    const shop = await this.repo.findOneBy({ id });
+    if (!shop) throw new NotFoundException('Shop not found');
+    if (shop.userId !== userId) throw new ForbiddenException();
+    return shop;
   }
 
   create(userId: string, dto: CreateShopDto): Promise<Shop> {
@@ -24,14 +24,13 @@ export class ShopService {
     return this.repo.findBy({ userId });
   }
 
-  update(id: string, userId: string, dto: Partial<CreateShopDto>): Promise<Shop> {
-    return this.repo.save({ id, userId, ...dto });
+  async update(id: string, userId: string, dto: UpdateShopDto): Promise<Shop> {
+    const shop = await this.findByIdForUser(id, userId);
+    return this.repo.save({ ...shop, ...dto });
   }
 
-  async remove(id: string, userId: string): Promise<Shop> {
-    if (!(await this.repo.findOneBy({ id, userId }))) {
-      throw new Error('Shop not found or not owned by user');
-    }
-    return this.repo.remove({ id, userId } as Shop);
+  async remove(id: string, userId: string): Promise<void> {
+    const shop = await this.findByIdForUser(id, userId);
+    await this.repo.remove(shop);
   }
 }

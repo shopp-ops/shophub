@@ -1,21 +1,21 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
-  Put,
-  Delete,
   Request,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { ShopService } from './shop.service';
-import { AuthenticatedUser } from 'src/auth/strategies/jwt.strategy';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
+import { ShopService } from './shop.service';
 
 @Controller('shops')
 @UseGuards(JwtAuthGuard)
@@ -25,26 +25,27 @@ export class ShopController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   create(@Request() req: { user: AuthenticatedUser }, @Body() dto: CreateShopDto) {
-    return this.shopService.create(req.user.id, dto);
+    return this.shopService.create(req.user.userId, dto);
   }
 
   @Get()
   findAll(@Request() req: { user: AuthenticatedUser }) {
-    return this.shopService.findAllByUser(req.user.id);
+    return this.shopService.findAllByUser(req.user.userId);
   }
 
   @Get(':id')
-  findOneForUser(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string) {
-    return this.shopService.findByIdForUser(id, req.user.id);
+  findOne(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string) {
+    return this.shopService.findByIdForUser(id, req.user.userId);
   }
 
-  @Put(':id')
+  @Patch(':id')
   update(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string, @Body() dto: UpdateShopDto) {
-    return this.shopService.update(id, req.user.id, dto);
+    return this.shopService.update(id, req.user.userId, dto);
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string) {
-    return this.shopService.remove(id, req.user.id);
+    return this.shopService.remove(id, req.user.userId);
   }
 }
