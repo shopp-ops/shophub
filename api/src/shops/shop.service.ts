@@ -12,6 +12,10 @@ export class ShopService {
     return this.repo.findOneBy({ id });
   }
 
+  findByIdForUser(id: string, userId: string): Promise<Shop | null> {
+    return this.repo.findOneBy({ id, userId });
+  }
+
   create(userId: string, dto: CreateShopDto): Promise<Shop> {
     return this.repo.save(this.repo.create({ ...dto, userId }));
   }
