@@ -43,5 +43,7 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ steps.version.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:latest
+          build-args: |
+            ${{ matrix.context == 'web' && format('NEXT_PUBLIC_API_URL={0}', vars.SHOPHUB_API_URL) || '' }}
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
