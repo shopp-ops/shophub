@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -35,7 +35,11 @@ type FormData = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, token, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && token) router.replace("/dashboard");
+  }, [token, loading, router]);
   const [serverError, setServerError] = useState<string | null>(null);
 
   const { control, handleSubmit, formState: { isSubmitting } } = useForm<FormData>({
