@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ApiException } from '@kubernetes/client-node';
+import { ApiException, PatchStrategy, RequestContext, ResponseContext } from '@kubernetes/client-node';
 import { KubernetesClientProvider } from './kubernetes-client.provider';
 import { buildShopIdentity } from './shop-identity.util';
 import { mapK8sError } from './k8s-error.mapper';
 import { GROUP, KIND, PLURAL, SHOP_ID_LABEL, VERSION } from './k8s.constants';
 import { ShopManifest } from './shop-manifest.interface';
+import { PromiseMiddlewareWrapper } from '@kubernetes/client-node/dist/gen/middleware';
 
 @Injectable()
 export class ShopResourceService {
@@ -44,17 +45,28 @@ export class ShopResourceService {
   }
 
   async patchShop(namespace: string, crName: string, partialSpec: Record<string, unknown>): Promise<void> {
+    const mergePatchMiddleware = new PromiseMiddlewareWrapper({
+      pre: (context: RequestContext) => {
+        context.setHeaderParam('Content-Type', PatchStrategy.MergePatch);
+        return Promise.resolve(context);
+      },
+      post: (context: ResponseContext) => {
+        return Promise.resolve(context);
+      },
+    });
+
     try {
-      // The 1.x client defaults patchNamespacedCustomObject to
-      // application/merge-patch+json, so no explicit content-type is needed.
-      await this.client.customObjectsApi().patchNamespacedCustomObject({
-        group: GROUP,
-        version: VERSION,
-        namespace,
-        plural: PLURAL,
-        name: crName,
-        body: { spec: partialSpec },
-      });
+      await this.client.customObjectsApi().patchNamespacedCustomObject(
+        {
+          group: GROUP,
+          version: VERSION,
+          namespace,
+          plural: PLURAL,
+          name: crName,
+          body: { spec: partialSpec },
+        },
+        { middleware: [mergePatchMiddleware], middlewareMergeStrategy: 'append' },
+      );
     } catch (error) {
       throw mapK8sError(error);
     }
