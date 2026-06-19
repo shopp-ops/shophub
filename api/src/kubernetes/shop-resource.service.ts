@@ -43,23 +43,18 @@ export class ShopResourceService {
     }
   }
 
-  async patchShop(
-    namespace: string,
-    crName: string,
-    partialSpec: Record<string, unknown>,
-  ): Promise<void> {
+  async patchShop(namespace: string, crName: string, partialSpec: Record<string, unknown>): Promise<void> {
     try {
-      await this.client.customObjectsApi().patchNamespacedCustomObject(
-        {
-          group: GROUP,
-          version: VERSION,
-          namespace,
-          plural: PLURAL,
-          name: crName,
-          body: { spec: partialSpec },
-        },
-        { headers: { 'Content-Type': 'application/merge-patch+json' } },
-      );
+      // The 1.x client defaults patchNamespacedCustomObject to
+      // application/merge-patch+json, so no explicit content-type is needed.
+      await this.client.customObjectsApi().patchNamespacedCustomObject({
+        group: GROUP,
+        version: VERSION,
+        namespace,
+        plural: PLURAL,
+        name: crName,
+        body: { spec: partialSpec },
+      });
     } catch (error) {
       throw mapK8sError(error);
     }

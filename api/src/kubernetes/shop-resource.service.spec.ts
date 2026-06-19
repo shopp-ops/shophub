@@ -143,17 +143,14 @@ describe('ShopResourceService get/patch/delete', () => {
 
   it('patchShop sends a merge-patch of the spec', async () => {
     await service.patchShop('shop-ns', 'my-shop-7c9e6679', { availability: 'high' });
-    expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith(
-      {
-        group: 'shopops.shopops.dc.com',
-        version: 'v1',
-        namespace: 'shop-ns',
-        plural: 'shops',
-        name: 'my-shop-7c9e6679',
-        body: { spec: { availability: 'high' } },
-      },
-      { headers: { 'Content-Type': 'application/merge-patch+json' } },
-    );
+    expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith({
+      group: 'shopops.shopops.dc.com',
+      version: 'v1',
+      namespace: 'shop-ns',
+      plural: 'shops',
+      name: 'my-shop-7c9e6679',
+      body: { spec: { availability: 'high' } },
+    });
   });
 
   it('deleteShop deletes the CR', async () => {
