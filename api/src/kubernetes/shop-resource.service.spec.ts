@@ -100,3 +100,75 @@ describe('ShopResourceService.createShop', () => {
     await expect(service.createShop(manifest)).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+describe('ShopResourceService get/patch/delete', () => {
+  let custom: {
+    getNamespacedCustomObject: jest.Mock;
+    patchNamespacedCustomObject: jest.Mock;
+    deleteNamespacedCustomObject: jest.Mock;
+  };
+  let core: { deleteNamespace: jest.Mock };
+  let service: ShopResourceService;
+
+  beforeEach(() => {
+    custom = {
+      getNamespacedCustomObject: jest.fn().mockResolvedValue({ kind: 'Shop' }),
+      patchNamespacedCustomObject: jest.fn().mockResolvedValue({}),
+      deleteNamespacedCustomObject: jest.fn().mockResolvedValue({}),
+    };
+    core = { deleteNamespace: jest.fn().mockResolvedValue({}) };
+    const client = {
+      customObjectsApi: () => custom,
+      coreV1Api: () => core,
+    } as unknown as KubernetesClientProvider;
+    service = new ShopResourceService(client);
+  });
+
+  it('getShop requests the CR by coordinates', async () => {
+    const result = await service.getShop('shop-ns', 'my-shop-7c9e6679');
+    expect(custom.getNamespacedCustomObject).toHaveBeenCalledWith({
+      group: 'shopops.shopops.dc.com',
+      version: 'v1',
+      namespace: 'shop-ns',
+      plural: 'shops',
+      name: 'my-shop-7c9e6679',
+    });
+    expect(result).toEqual({ kind: 'Shop' });
+  });
+
+  it('getShop maps a 404 to NotFoundException', async () => {
+    custom.getNamespacedCustomObject.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
+    await expect(service.getShop('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('patchShop sends a merge-patch of the spec', async () => {
+    await service.patchShop('shop-ns', 'my-shop-7c9e6679', { availability: 'high' });
+    expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith(
+      {
+        group: 'shopops.shopops.dc.com',
+        version: 'v1',
+        namespace: 'shop-ns',
+        plural: 'shops',
+        name: 'my-shop-7c9e6679',
+        body: { spec: { availability: 'high' } },
+      },
+      { headers: { 'Content-Type': 'application/merge-patch+json' } },
+    );
+  });
+
+  it('deleteShop deletes the CR', async () => {
+    await service.deleteShop('shop-ns', 'my-shop-7c9e6679');
+    expect(custom.deleteNamespacedCustomObject).toHaveBeenCalledWith({
+      group: 'shopops.shopops.dc.com',
+      version: 'v1',
+      namespace: 'shop-ns',
+      plural: 'shops',
+      name: 'my-shop-7c9e6679',
+    });
+  });
+
+  it('deleteShopNamespace deletes the namespace', async () => {
+    await service.deleteShopNamespace('shop-ns');
+    expect(core.deleteNamespace).toHaveBeenCalledWith({ name: 'shop-ns' });
+  });
+});

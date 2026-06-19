@@ -29,6 +29,64 @@ export class ShopResourceService {
     }
   }
 
+  async getShop(namespace: string, crName: string): Promise<unknown> {
+    try {
+      return await this.client.customObjectsApi().getNamespacedCustomObject({
+        group: GROUP,
+        version: VERSION,
+        namespace,
+        plural: PLURAL,
+        name: crName,
+      });
+    } catch (error) {
+      throw mapK8sError(error);
+    }
+  }
+
+  async patchShop(
+    namespace: string,
+    crName: string,
+    partialSpec: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.client.customObjectsApi().patchNamespacedCustomObject(
+        {
+          group: GROUP,
+          version: VERSION,
+          namespace,
+          plural: PLURAL,
+          name: crName,
+          body: { spec: partialSpec },
+        },
+        { headers: { 'Content-Type': 'application/merge-patch+json' } },
+      );
+    } catch (error) {
+      throw mapK8sError(error);
+    }
+  }
+
+  async deleteShop(namespace: string, crName: string): Promise<void> {
+    try {
+      await this.client.customObjectsApi().deleteNamespacedCustomObject({
+        group: GROUP,
+        version: VERSION,
+        namespace,
+        plural: PLURAL,
+        name: crName,
+      });
+    } catch (error) {
+      throw mapK8sError(error);
+    }
+  }
+
+  async deleteShopNamespace(namespace: string): Promise<void> {
+    try {
+      await this.client.coreV1Api().deleteNamespace({ name: namespace });
+    } catch (error) {
+      throw mapK8sError(error);
+    }
+  }
+
   private async ensureNamespace(name: string): Promise<void> {
     try {
       await this.client.coreV1Api().createNamespace({ body: { metadata: { name } } });
