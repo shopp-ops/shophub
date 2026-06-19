@@ -1,10 +1,16 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { K3sContainer, StartedK3sContainer } from '@testcontainers/k3s';
+import { ApiextensionsV1Api, CustomObjectsApi, KubeConfig, loadYaml } from '@kubernetes/client-node';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { buildShopIdentity } from '../src/kubernetes/shop-identity.util';
 
 const USER_A = { email: 'user-a@example.com', password: 'password123' };
 const USER_B = { email: 'user-b@example.com', password: 'password123' };
@@ -22,21 +28,53 @@ async function registerAndLogin(app: INestApplication<App>, credentials: { email
   return res.body.accessToken as string;
 }
 
+async function applyShopCrd(kubeConfigYaml: string): Promise<void> {
+  const kc = new KubeConfig();
+  kc.loadFromString(kubeConfigYaml);
+  const ext = kc.makeApiClient(ApiextensionsV1Api);
+  const crd = loadYaml<object>(readFileSync(join(__dirname, 'fixtures', 'shop-crd.yaml'), 'utf8'));
+  await ext.createCustomResourceDefinition({ body: crd as never });
+  const co = kc.makeApiClient(CustomObjectsApi);
+  for (let i = 0; i < 30; i++) {
+    try {
+      await co.listClusterCustomObject({ group: 'shopops.shopops.dc.com', version: 'v1', plural: 'shops' });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw new Error('Shop CRD did not become established');
+}
+
 describe('Shops (e2e)', () => {
   let app: INestApplication<App>;
-  let container: StartedPostgreSqlContainer;
+  let pg: StartedPostgreSqlContainer;
+  let k3s: StartedK3sContainer;
+  let k8s: CustomObjectsApi;
   let tokenA: string;
   let tokenB: string;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:16').start();
-    process.env.DATABASE_URL = container.getConnectionUri();
+    pg = await new PostgreSqlContainer('postgres:16').start();
+    k3s = await new K3sContainer('rancher/k3s:v1.31.2-k3s1').start();
+
+    const kubeConfigYaml = k3s.getKubeConfig();
+    const kubeConfigPath = join(tmpdir(), `shophub-e2e-kubeconfig-${Date.now()}`);
+    writeFileSync(kubeConfigPath, kubeConfigYaml);
+    await applyShopCrd(kubeConfigYaml);
+
+    const kc = new KubeConfig();
+    kc.loadFromString(kubeConfigYaml);
+    k8s = kc.makeApiClient(CustomObjectsApi);
+
+    process.env.DATABASE_URL = pg.getConnectionUri();
     process.env.JWT_SECRET = 'test-jwt-secret';
+    process.env.KUBECONFIG = kubeConfigPath;
+    process.env.SHOP_API_IMAGE = 'ghcr.io/shopp-ops/shop-api:1';
+    process.env.SHOP_WEB_IMAGE = 'ghcr.io/shopp-ops/shop-web:1';
+    process.env.SHOP_HOST_SUFFIX = 'local';
 
-    const moduleFixture = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
-
+    const moduleFixture = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.init();
@@ -44,11 +82,12 @@ describe('Shops (e2e)', () => {
 
     tokenA = await registerAndLogin(app, USER_A);
     tokenB = await registerAndLogin(app, USER_B);
-  }, 60_000);
+  }, 180_000);
 
   afterAll(async () => {
     await app.close();
-    await container.stop();
+    await pg.stop();
+    await k3s.stop();
   });
 
   describe('POST /shops', () => {
@@ -72,6 +111,24 @@ describe('Shops (e2e)', () => {
       });
     });
 
+    it('creates a real Shop CR in the cluster', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/shops')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_SHOP, name: 'cr-check' })
+        .expect(201);
+
+      const { namespace, crName } = buildShopIdentity(res.body.id, 'cr-check');
+      const cr = await k8s.getNamespacedCustomObject({
+        group: 'shopops.shopops.dc.com',
+        version: 'v1',
+        namespace,
+        plural: 'shops',
+        name: crName,
+      });
+      expect((cr as { spec: { name: string } }).spec.name).toBe('cr-check');
+    });
+
     it('returns 400 for missing required field', () => {
       return request(app.getHttpServer())
         .post('/shops')
@@ -87,10 +144,7 @@ describe('Shops (e2e)', () => {
     });
 
     it('returns only shops owned by the authenticated user', async () => {
-      const res = await request(app.getHttpServer())
-        .get('/shops')
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(200);
+      const res = await request(app.getHttpServer()).get('/shops').set('Authorization', `Bearer ${tokenA}`).expect(200);
 
       expect(Array.isArray(res.body)).toBe(true);
       res.body.forEach((shop: { name: string }) => {
@@ -123,10 +177,7 @@ describe('Shops (e2e)', () => {
     });
 
     it('returns 403 for non-owner', () => {
-      return request(app.getHttpServer())
-        .get(`/shops/${shopId}`)
-        .set('Authorization', `Bearer ${tokenB}`)
-        .expect(403);
+      return request(app.getHttpServer()).get(`/shops/${shopId}`).set('Authorization', `Bearer ${tokenB}`).expect(403);
     });
 
     it('returns 404 for non-existent shop', () => {
@@ -177,6 +228,25 @@ describe('Shops (e2e)', () => {
         .send({ availabilityTier: 'high' })
         .expect(404);
     });
+
+    it('updates the real Shop CR in the cluster', async () => {
+      await request(app.getHttpServer())
+        .patch(`/shops/${shopId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ availabilityTier: 'standard' })
+        .expect(200);
+
+      const { namespace, crName } = buildShopIdentity(shopId, 'shop-for-update');
+      const cr = await k8s.getNamespacedCustomObject({
+        group: 'shopops.shopops.dc.com',
+        version: 'v1',
+        namespace,
+        plural: 'shops',
+        name: crName,
+      });
+
+      expect(cr.spec.availability).toBe('standard');
+    });
   });
 
   describe('DELETE /shops/:id', () => {
@@ -207,10 +277,7 @@ describe('Shops (e2e)', () => {
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(204);
 
-      await request(app.getHttpServer())
-        .get(`/shops/${shopId}`)
-        .set('Authorization', `Bearer ${tokenA}`)
-        .expect(404);
+      await request(app.getHttpServer()).get(`/shops/${shopId}`).set('Authorization', `Bearer ${tokenA}`).expect(404);
     });
 
     it('returns 404 for non-existent shop', () => {
