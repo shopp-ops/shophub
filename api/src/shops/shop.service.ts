@@ -59,8 +59,8 @@ export class ShopService {
   async remove(id: string, userId: string): Promise<void> {
     const shop = await this.findByIdForUser(id, userId);
     const original = { ...shop };
-    await this.repo.remove(shop);
     const { namespace } = buildShopIdentity(shop.id, shop.name);
+    await this.repo.remove(shop);
     try {
       await this.k8s.deleteShopNamespace(namespace);
     } catch (error) {
