@@ -6,11 +6,12 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { K3sContainer, StartedK3sContainer } from '@testcontainers/k3s';
-import { ApiextensionsV1Api, CustomObjectsApi, KubeConfig, loadYaml } from '@kubernetes/client-node';
+import { ApiextensionsV1Api, CoreV1Api, CustomObjectsApi, KubeConfig, loadYaml } from '@kubernetes/client-node';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { buildShopIdentity } from '../src/kubernetes/shop-identity.util';
+import { ShopResourceService } from '../src/kubernetes/shop-resource.service';
 
 const USER_A = { email: 'user-a@example.com', password: 'password123' };
 const USER_B = { email: 'user-b@example.com', password: 'password123' };
@@ -51,6 +52,8 @@ describe('Shops (e2e)', () => {
   let pg: StartedPostgreSqlContainer;
   let k3s: StartedK3sContainer;
   let k8s: CustomObjectsApi;
+  let coreApi: CoreV1Api;
+  let shopResource: ShopResourceService;
   let tokenA: string;
   let tokenB: string;
 
@@ -66,6 +69,7 @@ describe('Shops (e2e)', () => {
     const kc = new KubeConfig();
     kc.loadFromString(kubeConfigYaml);
     k8s = kc.makeApiClient(CustomObjectsApi);
+    coreApi = kc.makeApiClient(CoreV1Api);
 
     process.env.DATABASE_URL = pg.getConnectionUri();
     process.env.JWT_SECRET = 'test-jwt-secret';
@@ -73,12 +77,17 @@ describe('Shops (e2e)', () => {
     process.env.SHOP_API_IMAGE = 'ghcr.io/shopp-ops/shop-api:1';
     process.env.SHOP_WEB_IMAGE = 'ghcr.io/shopp-ops/shop-web:1';
     process.env.SHOP_HOST_SUFFIX = 'local';
+    // No operator runs in the test cluster, so nothing marks shops Ready —
+    // keep the readiness wait short so create returns a credentialsError fast.
+    process.env.SHOP_READY_POLL_MS = '400';
+    process.env.SHOP_READY_TIMEOUT_MS = '2000';
 
     const moduleFixture = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleFixture.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.init();
     await (app.getHttpAdapter().getInstance() as { ready(): Promise<void> }).ready();
+    shopResource = app.get(ShopResourceService);
 
     tokenA = await registerAndLogin(app, USER_A);
     tokenB = await registerAndLogin(app, USER_B);
@@ -102,7 +111,7 @@ describe('Shops (e2e)', () => {
         .send(VALID_SHOP)
         .expect(201);
 
-      expect(res.body).toMatchObject({
+      expect(res.body.shop).toMatchObject({
         id: expect.any(String),
         name: 'test-shop',
         availabilityTier: 'standard',
@@ -118,7 +127,7 @@ describe('Shops (e2e)', () => {
         .send({ ...VALID_SHOP, name: 'cr-check' })
         .expect(201);
 
-      const { namespace, crName } = buildShopIdentity(res.body.id, 'cr-check');
+      const { namespace, crName } = buildShopIdentity(res.body.shop.id, 'cr-check');
       const cr = await k8s.getNamespacedCustomObject({
         group: 'shopops.shopops.dc.com',
         version: 'v1',
@@ -161,7 +170,7 @@ describe('Shops (e2e)', () => {
         .post('/shops')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ ...VALID_SHOP, name: 'shop-for-get' });
-      shopId = res.body.id;
+      shopId = res.body.shop.id;
     });
 
     it('returns 401 without token', () => {
@@ -196,7 +205,7 @@ describe('Shops (e2e)', () => {
         .post('/shops')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ ...VALID_SHOP, name: 'shop-for-update' });
-      shopId = res.body.id;
+      shopId = res.body.shop.id;
     });
 
     it('returns 401 without token', () => {
@@ -257,7 +266,7 @@ describe('Shops (e2e)', () => {
         .post('/shops')
         .set('Authorization', `Bearer ${tokenA}`)
         .send({ ...VALID_SHOP, name: 'shop-for-delete' });
-      shopId = res.body.id;
+      shopId = res.body.shop.id;
     });
 
     it('returns 401 without token', () => {
@@ -286,5 +295,97 @@ describe('Shops (e2e)', () => {
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(404);
     });
+  });
+
+  describe('admin credentials', () => {
+    const group = 'shopops.shopops.dc.com';
+    const version = 'v1';
+    const plural = 'shops';
+
+    it('returns credentialsError when nothing marks the shop Ready', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/shops')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_SHOP, name: 'shop-noready' })
+        .expect(201);
+
+      expect(res.body.shop).toBeDefined();
+      expect(res.body.adminCredentials).toBeNull();
+      expect(res.body.credentialsError).toBeDefined();
+
+      const get = await request(app.getHttpServer())
+        .get(`/shops/${res.body.shop.id}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(get.body.adminCredentials).toBeUndefined();
+    }, 30_000);
+
+    it('readAdminCredentials decodes a real Secret from the cluster', async () => {
+      const namespace = 'shop-cred-test';
+      const crName = 'cred-shop-abc12345';
+      await coreApi.createNamespace({ body: { metadata: { name: namespace } } });
+      await coreApi.createNamespacedSecret({
+        namespace,
+        body: {
+          metadata: { name: `${crName}-admin-credentials` },
+          stringData: { email: 'admin@shop.local', password: 's3cret' },
+        },
+      });
+
+      const creds = await shopResource.readAdminCredentials(namespace, crName);
+      expect(creds).toEqual({ email: 'admin@shop.local', password: 's3cret' });
+    }, 30_000);
+
+    it('waitForReady resolves when the Shop status reports Ready', async () => {
+      const namespace = 'shop-ready-test';
+      const crName = 'ready-shop-abc12345';
+      await coreApi.createNamespace({ body: { metadata: { name: namespace } } });
+      const created = (await k8s.createNamespacedCustomObject({
+        group,
+        version,
+        namespace,
+        plural,
+        body: {
+          apiVersion: `${group}/${version}`,
+          kind: 'Shop',
+          metadata: { name: crName },
+          spec: {
+            name: 'ready-shop',
+            availability: 'standard',
+            database: { type: 'standard' },
+            apiImage: 'ghcr.io/x/api:1',
+            webImage: 'ghcr.io/x/web:1',
+          },
+        },
+      })) as { metadata: { resourceVersion: string } };
+
+      await k8s.replaceNamespacedCustomObjectStatus({
+        group,
+        version,
+        namespace,
+        plural,
+        name: crName,
+        body: {
+          apiVersion: `${group}/${version}`,
+          kind: 'Shop',
+          metadata: { name: crName, resourceVersion: created.metadata.resourceVersion },
+          status: {
+            conditions: [
+              {
+                type: 'Ready',
+                status: 'True',
+                reason: 'Test',
+                message: 'test',
+                lastTransitionTime: new Date().toISOString(),
+              },
+            ],
+          },
+        },
+      });
+
+      await expect(
+        shopResource.waitForReady(namespace, crName, { pollMs: 200, timeoutMs: 5000 }),
+      ).resolves.toBeUndefined();
+    }, 30_000);
   });
 });
