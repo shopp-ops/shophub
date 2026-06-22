@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -18,6 +18,8 @@ const mockK8s = {
   createShop: jest.fn().mockResolvedValue(undefined),
   patchShop: jest.fn().mockResolvedValue(undefined),
   deleteShopNamespace: jest.fn().mockResolvedValue(undefined),
+  waitForReady: jest.fn().mockResolvedValue(undefined),
+  readAdminCredentials: jest.fn().mockResolvedValue({ email: 'a@b.c', password: 'pw' }),
 };
 
 const mockConfig = {
@@ -35,6 +37,8 @@ describe('ShopService', () => {
     mockK8s.createShop.mockResolvedValue(undefined);
     mockK8s.patchShop.mockResolvedValue(undefined);
     mockK8s.deleteShopNamespace.mockResolvedValue(undefined);
+    mockK8s.waitForReady.mockResolvedValue(undefined);
+    mockK8s.readAdminCredentials.mockResolvedValue({ email: 'a@b.c', password: 'pw' });
     const module = await Test.createTestingModule({
       providers: [
         ShopService,
@@ -84,13 +88,39 @@ describe('ShopService', () => {
       expect(mockK8s.createShop).toHaveBeenCalledWith(
         expect.objectContaining({ id: saved.id, name: 'my-shop', availability: 'standard', database: 'standard' }),
       );
-      expect(result).toEqual(saved);
+      expect(result.shop).toEqual(saved);
     });
 
     it('rolls back the DB row and rethrows when CR creation fails', async () => {
       mockK8s.createShop.mockRejectedValue(new Error('k8s down'));
       await expect(service.create('user-1', dto)).rejects.toThrow('k8s down');
       expect(mockRepo.remove).toHaveBeenCalledWith(saved);
+    });
+
+    it('returns admin credentials once the shop is Ready', async () => {
+      mockK8s.waitForReady.mockResolvedValue(undefined);
+      mockK8s.readAdminCredentials.mockResolvedValue({ email: 'admin@shop.local', password: 's3cret' });
+      const result = await service.create('user-1', dto);
+      expect(result.shop).toEqual(saved);
+      expect(result.adminCredentials).toEqual({ email: 'admin@shop.local', password: 's3cret' });
+      expect(result.credentialsError).toBeUndefined();
+    });
+
+    it('returns credentialsError when readiness times out', async () => {
+      mockK8s.waitForReady.mockRejectedValue(new ServiceUnavailableException('timeout'));
+      const result = await service.create('user-1', dto);
+      expect(result.shop).toEqual(saved);
+      expect(result.adminCredentials).toBeNull();
+      expect(result.credentialsError).toContain('timeout');
+      expect(mockK8s.readAdminCredentials).not.toHaveBeenCalled();
+    });
+
+    it('returns credentialsError when the secret is missing', async () => {
+      mockK8s.waitForReady.mockResolvedValue(undefined);
+      mockK8s.readAdminCredentials.mockRejectedValue(new NotFoundException('no secret'));
+      const result = await service.create('user-1', dto);
+      expect(result.adminCredentials).toBeNull();
+      expect(result.credentialsError).toBeDefined();
     });
   });
 

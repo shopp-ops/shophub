@@ -6,6 +6,7 @@ import { buildShopIdentity } from '../kubernetes/shop-identity.util';
 import { ShopResourceService } from '../kubernetes/shop-resource.service';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
+import { CreateShopResult } from './create-shop-result.interface';
 import { ShopManifestConfig, mapUpdateToSpec, toShopManifest } from './shop-manifest.mapper';
 import { Shop } from './shop.entity';
 
@@ -30,14 +31,31 @@ export class ShopService {
     return this.repo.findBy({ userId });
   }
 
-  async create(userId: string, dto: CreateShopDto): Promise<Shop> {
+  async create(userId: string, dto: CreateShopDto): Promise<CreateShopResult> {
     const saved = await this.repo.save(this.repo.create({ ...dto, userId }));
     try {
       await this.k8s.createShop(toShopManifest(saved, this.manifestConfig()));
     } catch (error) {
       await this.rollback(() => this.repo.remove(saved), error);
     }
-    return saved;
+
+    const { namespace, crName } = buildShopIdentity(saved.id, saved.name);
+    try {
+      await this.k8s.waitForReady(namespace, crName, {
+        pollMs: this.config.get<number>('SHOP_READY_POLL_MS') ?? 2000,
+        timeoutMs: this.config.get<number>('SHOP_READY_TIMEOUT_MS') ?? 90000,
+      });
+      const adminCredentials = await this.k8s.readAdminCredentials(namespace, crName);
+      return { shop: saved, adminCredentials };
+    } catch (error) {
+      const message = (error as Error).message;
+      this.logger.warn(`Admin credentials unavailable for ${namespace}/${crName}: ${message}`);
+      return {
+        shop: saved,
+        adminCredentials: null,
+        credentialsError: `Shop created, but admin credentials could not be retrieved (${message})`,
+      };
+    }
   }
 
   async update(id: string, userId: string, dto: UpdateShopDto): Promise<Shop> {
