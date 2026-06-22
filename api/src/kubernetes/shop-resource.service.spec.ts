@@ -218,4 +218,36 @@ describe('ShopResourceService get/patch/delete', () => {
     core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
     await expect(service.readAdminCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('readShopStatus returns the resolved walletAddress from status', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: { walletAddress: '0xfeed' } });
+    await expect(service.readShopStatus('shop-ns', 'my-shop-7c9e6679')).resolves.toEqual({
+      walletAddress: '0xfeed',
+    });
+  });
+
+  it('readShopStatus returns undefined walletAddress when status is empty', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: {} });
+    await expect(service.readShopStatus('shop-ns', 'x')).resolves.toEqual({ walletAddress: undefined });
+  });
+
+  it('readWalletCredentials reads and base64-decodes the keypair secret', async () => {
+    core.readNamespacedSecret.mockResolvedValue({
+      data: {
+        address: Buffer.from('0xabc').toString('base64'),
+        privateKey: Buffer.from('0xdeadbeef').toString('base64'),
+      },
+    });
+    const creds = await service.readWalletCredentials('shop-ns', 'my-shop-7c9e6679');
+    expect(core.readNamespacedSecret).toHaveBeenCalledWith({
+      name: 'wallet-my-shop-7c9e6679-wallet-keypair',
+      namespace: 'shop-ns',
+    });
+    expect(creds).toEqual({ address: '0xabc', privateKey: '0xdeadbeef' });
+  });
+
+  it('readWalletCredentials maps a 404 to NotFoundException', async () => {
+    core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
+    await expect(service.readWalletCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
 });

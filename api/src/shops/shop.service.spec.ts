@@ -20,6 +20,8 @@ const mockK8s = {
   deleteShopNamespace: jest.fn().mockResolvedValue(undefined),
   waitForReady: jest.fn().mockResolvedValue(undefined),
   readAdminCredentials: jest.fn().mockResolvedValue({ email: 'a@b.c', password: 'pw' }),
+  readShopStatus: jest.fn().mockResolvedValue({ walletAddress: undefined }),
+  readWalletCredentials: jest.fn().mockResolvedValue({ address: '0xgen', privateKey: '0xpriv' }),
 };
 
 const mockConfig = {
@@ -39,6 +41,8 @@ describe('ShopService', () => {
     mockK8s.deleteShopNamespace.mockResolvedValue(undefined);
     mockK8s.waitForReady.mockResolvedValue(undefined);
     mockK8s.readAdminCredentials.mockResolvedValue({ email: 'a@b.c', password: 'pw' });
+    mockK8s.readShopStatus.mockResolvedValue({ walletAddress: undefined });
+    mockK8s.readWalletCredentials.mockResolvedValue({ address: '0xgen', privateKey: '0xpriv' });
     const module = await Test.createTestingModule({
       providers: [
         ShopService,
@@ -121,6 +125,45 @@ describe('ShopService', () => {
       const result = await service.create('user-1', dto);
       expect(result.adminCredentials).toBeNull();
       expect(result.credentialsError).toBeDefined();
+    });
+
+    describe('wallet', () => {
+      const autoDto = { ...dto, walletAddress: undefined };
+      const autoSaved = { ...saved, walletAddress: null as string | null };
+
+      beforeEach(() => {
+        mockRepo.create.mockReturnValue({ ...autoDto, userId: 'user-1' });
+        mockRepo.save.mockResolvedValue(autoSaved);
+      });
+
+      it('auto-gen: returns wallet credentials and persists the resolved address', async () => {
+        mockK8s.readShopStatus.mockResolvedValue({ walletAddress: '0xgenerated' });
+        mockK8s.readWalletCredentials.mockResolvedValue({ address: '0xgenerated', privateKey: '0xkey' });
+
+        const result = await service.create('user-1', autoDto);
+
+        expect(mockK8s.readWalletCredentials).toHaveBeenCalledWith('shop-my-shop-7c9e6679', 'my-shop-7c9e6679');
+        expect(result.walletCredentials).toEqual({ address: '0xgenerated', privateKey: '0xkey' });
+        expect(result.shop.walletAddress).toBe('0xgenerated');
+        expect(mockRepo.save).toHaveBeenLastCalledWith(expect.objectContaining({ walletAddress: '0xgenerated' }));
+      });
+
+      it('provided address: no wallet read, walletCredentials null', async () => {
+        const result = await service.create('user-1', dto);
+        expect(mockK8s.readWalletCredentials).not.toHaveBeenCalled();
+        expect(result.walletCredentials).toBeNull();
+      });
+
+      it('auto-gen: wallet read failure leaves walletCredentials null, admin creds still returned', async () => {
+        mockK8s.readShopStatus.mockResolvedValue({ walletAddress: '0xgenerated' });
+        mockK8s.readWalletCredentials.mockRejectedValue(new NotFoundException('no keypair'));
+
+        const result = await service.create('user-1', autoDto);
+
+        expect(result.walletCredentials).toBeNull();
+        expect(result.adminCredentials).toEqual({ email: 'a@b.c', password: 'pw' });
+        expect(result.credentialsError).toBeUndefined();
+      });
     });
   });
 

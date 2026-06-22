@@ -145,6 +145,31 @@ describe('Shops (e2e)', () => {
         .send({ name: 'no-tier' })
         .expect(400);
     });
+
+    it('accepts an omitted walletAddress (auto-generate case)', async () => {
+      const { walletAddress: _omit, ...noWallet } = VALID_SHOP;
+      const res = await request(app.getHttpServer())
+        .post('/shops')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...noWallet, name: 'auto-wallet' })
+        .expect(201);
+
+      expect(res.body.shop.name).toBe('auto-wallet');
+      expect(res.body.shop.walletAddress).toBeNull();
+      // No operator → not Ready → no wallet credentials surfaced.
+      expect(res.body.walletCredentials).toBeNull();
+
+      const { namespace, crName } = buildShopIdentity(res.body.shop.id, 'auto-wallet');
+      const cr = await k8s.getNamespacedCustomObject({
+        group: 'shopops.shopops.dc.com',
+        version: 'v1',
+        namespace,
+        plural: 'shops',
+        name: crName,
+      });
+      // Empty address → spec.walletAddress is left unset for the operator to fill.
+      expect((cr as { spec: { walletAddress?: string } }).spec.walletAddress).toBeUndefined();
+    }, 30_000);
   });
 
   describe('GET /shops', () => {
@@ -334,6 +359,64 @@ describe('Shops (e2e)', () => {
 
       const creds = await shopResource.readAdminCredentials(namespace, crName);
       expect(creds).toEqual({ email: 'admin@shop.local', password: 's3cret' });
+    }, 30_000);
+
+    it('readShopStatus reads the operator-resolved walletAddress from a real CR', async () => {
+      const namespace = 'shop-walletstatus-test';
+      const crName = 'walletstatus-shop-abc12345';
+      await coreApi.createNamespace({ body: { metadata: { name: namespace } } });
+      const created = (await k8s.createNamespacedCustomObject({
+        group,
+        version,
+        namespace,
+        plural,
+        body: {
+          apiVersion: `${group}/${version}`,
+          kind: 'Shop',
+          metadata: { name: crName },
+          spec: {
+            name: 'walletstatus-shop',
+            availability: 'standard',
+            database: { type: 'standard' },
+            apiImage: 'ghcr.io/x/api:1',
+            webImage: 'ghcr.io/x/web:1',
+          },
+        },
+      })) as { metadata: { resourceVersion: string } };
+
+      await k8s.replaceNamespacedCustomObjectStatus({
+        group,
+        version,
+        namespace,
+        plural,
+        name: crName,
+        body: {
+          apiVersion: `${group}/${version}`,
+          kind: 'Shop',
+          metadata: { name: crName, resourceVersion: created.metadata.resourceVersion },
+          status: { walletAddress: '0xGENERATEDADDR' },
+        },
+      });
+
+      await expect(shopResource.readShopStatus(namespace, crName)).resolves.toEqual({
+        walletAddress: '0xGENERATEDADDR',
+      });
+    }, 30_000);
+
+    it('readWalletCredentials decodes a real keypair Secret from the cluster', async () => {
+      const namespace = 'shop-keypair-test';
+      const crName = 'keypair-shop-abc12345';
+      await coreApi.createNamespace({ body: { metadata: { name: namespace } } });
+      await coreApi.createNamespacedSecret({
+        namespace,
+        body: {
+          metadata: { name: `wallet-${crName}-wallet-keypair` },
+          stringData: { address: '0xabc', privateKey: '0xdeadbeef' },
+        },
+      });
+
+      const creds = await shopResource.readWalletCredentials(namespace, crName);
+      expect(creds).toEqual({ address: '0xabc', privateKey: '0xdeadbeef' });
     }, 30_000);
 
     it('waitForReady resolves when the Shop status reports Ready', async () => {

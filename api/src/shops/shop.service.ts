@@ -32,6 +32,7 @@ export class ShopService {
   }
 
   async create(userId: string, dto: CreateShopDto): Promise<CreateShopResult> {
+    const autoGenerateWallet = !dto.walletAddress;
     const saved = await this.repo.save(this.repo.create({ ...dto, userId }));
     try {
       await this.k8s.createShop(toShopManifest(saved, this.manifestConfig()));
@@ -46,7 +47,8 @@ export class ShopService {
         timeoutMs: this.config.get<number>('SHOP_READY_TIMEOUT_MS') ?? 90000,
       });
       const adminCredentials = await this.k8s.readAdminCredentials(namespace, crName);
-      return { shop: saved, adminCredentials };
+      const walletCredentials = await this.resolveWallet(saved, autoGenerateWallet, namespace, crName);
+      return { shop: saved, adminCredentials, walletCredentials };
     } catch (error) {
       const message = (error as Error).message;
       this.logger.warn(`Admin credentials unavailable for ${namespace}/${crName}: ${message}`);
@@ -54,7 +56,31 @@ export class ShopService {
         shop: saved,
         adminCredentials: null,
         credentialsError: `Shop created, but admin credentials could not be retrieved (${message})`,
+        walletCredentials: null,
       };
+    }
+  }
+
+  // Best-effort: reads the operator-resolved wallet address (persisting it onto the
+  // shop row) and, for the auto-generated case only, the one-time keypair credentials.
+  // Any failure here must not fail shop creation nor the admin-credentials result.
+  private async resolveWallet(
+    shop: Shop,
+    autoGenerate: boolean,
+    namespace: string,
+    crName: string,
+  ): Promise<{ address: string; privateKey: string } | null> {
+    try {
+      const { walletAddress } = await this.k8s.readShopStatus(namespace, crName);
+      if (walletAddress && walletAddress !== shop.walletAddress) {
+        shop.walletAddress = walletAddress;
+        await this.repo.save(shop);
+      }
+      if (!autoGenerate) return null;
+      return await this.k8s.readWalletCredentials(namespace, crName);
+    } catch (error) {
+      this.logger.warn(`Wallet credentials unavailable for ${namespace}/${crName}: ${(error as Error).message}`);
+      return null;
     }
   }
 

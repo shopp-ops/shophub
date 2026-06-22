@@ -109,6 +109,27 @@ export class ShopResourceService {
     }
   }
 
+  async readShopStatus(namespace: string, crName: string): Promise<{ walletAddress?: string }> {
+    const shop = (await this.getShop(namespace, crName)) as { status?: { walletAddress?: string } };
+    return { walletAddress: shop.status?.walletAddress };
+  }
+
+  async readWalletCredentials(namespace: string, crName: string): Promise<{ address: string; privateKey: string }> {
+    try {
+      const secret = await this.client.coreV1Api().readNamespacedSecret({
+        name: `wallet-${crName}-wallet-keypair`,
+        namespace,
+      });
+      const data = (secret.data ?? {}) as Record<string, string>;
+      return {
+        address: Buffer.from(data.address ?? '', 'base64').toString('utf8'),
+        privateKey: Buffer.from(data.privateKey ?? '', 'base64').toString('utf8'),
+      };
+    } catch (error) {
+      throw mapK8sError(error);
+    }
+  }
+
   async deleteShop(namespace: string, crName: string): Promise<void> {
     try {
       await this.client.customObjectsApi().deleteNamespacedCustomObject({

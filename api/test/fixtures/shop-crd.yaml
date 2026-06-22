@@ -170,6 +170,9 @@ spec:
               url:
                 description: Public URL of the shop (derived from spec.host).
                 type: string
+              walletAddress:
+                description: Resolved wallet address (operator-generated when spec.walletAddress is empty).
+                type: string
             type: object
         required:
         - spec
