@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { KubernetesModule } from './kubernetes/kubernetes.module';
 import { ShopsModule } from './shops/shop.module';
 
 @Module({
@@ -19,6 +20,7 @@ import { ShopsModule } from './shops/shop.module';
       }),
     }),
     AuthModule,
+    KubernetesModule,
     ShopsModule,
   ],
   controllers: [AppController],
