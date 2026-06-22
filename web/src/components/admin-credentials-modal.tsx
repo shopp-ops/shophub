@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
-import type { AdminCredentials } from "@/lib/api/shops";
+import type { AdminCredentials, WalletCredentials } from "@/lib/api/shops";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,11 +37,13 @@ function CopyField({ id, label, value }: { id: string; label: string; value: str
   );
 }
 
-export function AdminCredentialsModal({
-  credentials,
+export function CredentialsModal({
+  adminCredentials,
+  walletCredentials,
   onClose,
 }: {
-  credentials: AdminCredentials;
+  adminCredentials: AdminCredentials;
+  walletCredentials: WalletCredentials | null;
   onClose: () => void;
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
@@ -55,7 +57,7 @@ export function AdminCredentialsModal({
         onPointerDownOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Admin credentials</DialogTitle>
+          <DialogTitle>Save your credentials</DialogTitle>
         </DialogHeader>
 
         <Alert variant="destructive">
@@ -64,8 +66,23 @@ export function AdminCredentialsModal({
           </AlertDescription>
         </Alert>
 
-        <CopyField id="admin-email" label="Email" value={credentials.email} />
-        <CopyField id="admin-password" label="Password" value={credentials.password} />
+        <div className="space-y-3">
+          <p className="text-sm font-medium">Admin login</p>
+          <CopyField id="admin-email" label="Email" value={adminCredentials.email} />
+          <CopyField id="admin-password" label="Password" value={adminCredentials.password} />
+        </div>
+
+        {walletCredentials && (
+          <div className="space-y-3 border-t pt-4">
+            <p className="text-sm font-medium">Wallet (auto-generated)</p>
+            <p className="text-xs text-muted-foreground">
+              A wallet was generated for this shop. The private key is custodial and shown only here —
+              import it into your own wallet (e.g. MetaMask) to take control of it.
+            </p>
+            <CopyField id="wallet-address" label="Address" value={walletCredentials.address} />
+            <CopyField id="wallet-private-key" label="Private key" value={walletCredentials.privateKey} />
+          </div>
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input

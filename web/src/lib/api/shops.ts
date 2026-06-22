@@ -4,7 +4,7 @@ export type Shop = {
   id: string;
   name: string;
   availabilityTier: "standard" | "high";
-  walletAddress: string;
+  walletAddress: string | null;
   databaseType: "standard" | "light";
   userId: string;
   createdAt: string;
@@ -14,7 +14,7 @@ export type Shop = {
 export type CreateShopDto = {
   name: string;
   availabilityTier: "standard" | "high";
-  walletAddress: string;
+  walletAddress?: string;
   databaseType: "standard" | "light";
 };
 
@@ -29,10 +29,16 @@ export type AdminCredentials = {
   password: string;
 };
 
+export type WalletCredentials = {
+  address: string;
+  privateKey: string;
+};
+
 export type CreateShopResult = {
   shop: Shop;
   adminCredentials: AdminCredentials | null;
   credentialsError?: string;
+  walletCredentials: WalletCredentials | null;
 };
 
 export const shopsApi = {
