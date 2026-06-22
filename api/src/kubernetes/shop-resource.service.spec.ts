@@ -103,7 +103,7 @@ describe('ShopResourceService get/patch/delete', () => {
     patchNamespacedCustomObject: jest.Mock;
     deleteNamespacedCustomObject: jest.Mock;
   };
-  let core: { deleteNamespace: jest.Mock };
+  let core: { deleteNamespace: jest.Mock; readNamespacedSecret: jest.Mock };
   let service: ShopResourceService;
 
   beforeEach(() => {
@@ -112,7 +112,15 @@ describe('ShopResourceService get/patch/delete', () => {
       patchNamespacedCustomObject: jest.fn().mockResolvedValue({}),
       deleteNamespacedCustomObject: jest.fn().mockResolvedValue({}),
     };
-    core = { deleteNamespace: jest.fn().mockResolvedValue({}) };
+    core = {
+      deleteNamespace: jest.fn().mockResolvedValue({}),
+      readNamespacedSecret: jest.fn().mockResolvedValue({
+        data: {
+          email: Buffer.from('admin@shop.local').toString('base64'),
+          password: Buffer.from('s3cret').toString('base64'),
+        },
+      }),
+    };
     const client = {
       customObjectsApi: () => custom,
       coreV1Api: () => core,
@@ -185,5 +193,19 @@ describe('ShopResourceService get/patch/delete', () => {
     await expect(service.waitForReady('shop-ns', 'x', { pollMs: 1, timeoutMs: 10 })).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
+  });
+
+  it('readAdminCredentials reads and base64-decodes the secret', async () => {
+    const creds = await service.readAdminCredentials('shop-ns', 'my-shop-7c9e6679');
+    expect(core.readNamespacedSecret).toHaveBeenCalledWith({
+      name: 'my-shop-7c9e6679-admin-credentials',
+      namespace: 'shop-ns',
+    });
+    expect(creds).toEqual({ email: 'admin@shop.local', password: 's3cret' });
+  });
+
+  it('readAdminCredentials maps a 404 to NotFoundException', async () => {
+    core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
+    await expect(service.readAdminCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
