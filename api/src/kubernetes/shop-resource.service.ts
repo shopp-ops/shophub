@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ApiException, PatchStrategy, RequestContext, ResponseContext } from '@kubernetes/client-node';
 import { KubernetesClientProvider } from './kubernetes-client.provider';
 import { buildShopIdentity } from './shop-identity.util';
@@ -69,6 +69,27 @@ export class ShopResourceService {
       );
     } catch (error) {
       throw mapK8sError(error);
+    }
+  }
+
+  async waitForReady(
+    namespace: string,
+    crName: string,
+    opts: { pollMs?: number; timeoutMs?: number } = {},
+  ): Promise<void> {
+    const pollMs = opts.pollMs ?? 2000;
+    const timeoutMs = opts.timeoutMs ?? 90000;
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const shop = (await this.getShop(namespace, crName)) as {
+        status?: { conditions?: { type: string; status: string }[] };
+      };
+      const ready = shop.status?.conditions?.find((c) => c.type === 'Ready');
+      if (ready?.status === 'True') return;
+      if (Date.now() >= deadline) {
+        throw new ServiceUnavailableException(`Shop ${namespace}/${crName} not ready within ${timeoutMs}ms`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
   }
 

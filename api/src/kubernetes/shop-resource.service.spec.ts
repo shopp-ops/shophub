@@ -14,7 +14,7 @@ jest.mock('@kubernetes/client-node', () => ({
   CoreV1Api: class CoreV1Api {},
 }));
 
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ApiException } from '@kubernetes/client-node';
 import { ShopResourceService } from './shop-resource.service';
 import { KubernetesClientProvider } from './kubernetes-client.provider';
@@ -168,5 +168,22 @@ describe('ShopResourceService get/patch/delete', () => {
   it('deleteShopNamespace deletes the namespace', async () => {
     await service.deleteShopNamespace('shop-ns');
     expect(core.deleteNamespace).toHaveBeenCalledWith({ name: 'shop-ns' });
+  });
+
+  it('waitForReady resolves once the Ready condition is True', async () => {
+    custom.getNamespacedCustomObject
+      .mockResolvedValueOnce({ status: { conditions: [{ type: 'Ready', status: 'False' }] } })
+      .mockResolvedValueOnce({ status: { conditions: [{ type: 'Ready', status: 'True' }] } });
+    await expect(
+      service.waitForReady('shop-ns', 'my-shop-7c9e6679', { pollMs: 1, timeoutMs: 1000 }),
+    ).resolves.toBeUndefined();
+    expect(custom.getNamespacedCustomObject).toHaveBeenCalledTimes(2);
+  });
+
+  it('waitForReady throws ServiceUnavailable on timeout', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: { conditions: [] } });
+    await expect(service.waitForReady('shop-ns', 'x', { pollMs: 1, timeoutMs: 10 })).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 });
