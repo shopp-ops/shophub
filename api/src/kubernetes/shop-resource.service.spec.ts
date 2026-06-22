@@ -14,11 +14,7 @@ jest.mock('@kubernetes/client-node', () => ({
   CoreV1Api: class CoreV1Api {},
 }));
 
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiException } from '@kubernetes/client-node';
 import { ShopResourceService } from './shop-resource.service';
 import { KubernetesClientProvider } from './kubernetes-client.provider';
@@ -143,14 +139,19 @@ describe('ShopResourceService get/patch/delete', () => {
 
   it('patchShop sends a merge-patch of the spec', async () => {
     await service.patchShop('shop-ns', 'my-shop-7c9e6679', { availability: 'high' });
-    expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
-      version: 'v1',
-      namespace: 'shop-ns',
-      plural: 'shops',
-      name: 'my-shop-7c9e6679',
-      body: { spec: { availability: 'high' } },
-    });
+    expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith(
+      {
+        group: 'shopops.shopops.dc.com',
+        version: 'v1',
+        namespace: 'shop-ns',
+        plural: 'shops',
+        name: 'my-shop-7c9e6679',
+        body: { spec: { availability: 'high' } },
+      },
+      expect.objectContaining({
+        middleware: expect.arrayContaining([expect.objectContaining({ pre: expect.any(Function) })]),
+      }),
+    );
   });
 
   it('deleteShop deletes the CR', async () => {
