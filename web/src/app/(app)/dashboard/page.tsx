@@ -98,8 +98,8 @@ function CreateShopDialog({
   async function onSubmit(data: CreateFormData) {
     setServerError(null);
     try {
-      const shop = await shopsApi.create(token, data);
-      onCreated(shop);
+      const result = await shopsApi.create(token, data);
+      onCreated(result.shop);
       reset();
       onOpenChange(false);
     } catch (err) {
