@@ -195,6 +195,16 @@ describe('ShopResourceService get/patch/delete', () => {
     );
   });
 
+  it('waitForReady coerces string opts (no infinite loop on string env config)', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: { conditions: [] } });
+    await expect(
+      service.waitForReady('shop-ns', 'x', {
+        pollMs: '1' as unknown as number,
+        timeoutMs: '10' as unknown as number,
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
   it('readAdminCredentials reads and base64-decodes the secret', async () => {
     const creds = await service.readAdminCredentials('shop-ns', 'my-shop-7c9e6679');
     expect(core.readNamespacedSecret).toHaveBeenCalledWith({

@@ -77,8 +77,8 @@ export class ShopResourceService {
     crName: string,
     opts: { pollMs?: number; timeoutMs?: number } = {},
   ): Promise<void> {
-    const pollMs = opts.pollMs ?? 2000;
-    const timeoutMs = opts.timeoutMs ?? 90000;
+    const pollMs = Number(opts.pollMs ?? 2000);
+    const timeoutMs = Number(opts.timeoutMs ?? 90000);
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const shop = (await this.getShop(namespace, crName)) as {
