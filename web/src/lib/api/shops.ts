@@ -3,6 +3,7 @@ import { request } from "./client";
 export type Shop = {
   id: string;
   name: string;
+  adminEmail: string;
   availabilityTier: "standard" | "high";
   walletAddress: string | null;
   databaseType: "standard" | "light";
@@ -13,6 +14,7 @@ export type Shop = {
 
 export type CreateShopDto = {
   name: string;
+  adminEmail: string;
   availabilityTier: "standard" | "high";
   walletAddress?: string;
   databaseType: "standard" | "light";

@@ -40,6 +40,7 @@ import {
 const createSchema = z
   .object({
     name: z.string().min(2, "At least 2 characters"),
+    adminEmail: z.string().email("Valid email required"),
     availabilityTier: z.enum(["standard", "high"]),
     autoGenerateWallet: z.boolean(),
     walletAddress: z.string(),
@@ -107,6 +108,7 @@ function CreateShopDialog({
     resolver: zodResolver(createSchema),
     defaultValues: {
       name: "",
+      adminEmail: "",
       availabilityTier: "standard",
       autoGenerateWallet: true,
       walletAddress: "",
@@ -120,6 +122,7 @@ function CreateShopDialog({
     try {
       const result = await shopsApi.create(token, {
         name: data.name,
+        adminEmail: data.adminEmail,
         availabilityTier: data.availabilityTier,
         databaseType: data.databaseType,
         ...(data.autoGenerateWallet ? {} : { walletAddress: data.walletAddress.trim() }),
@@ -151,6 +154,23 @@ function CreateShopDialog({
               <Field data-invalid={fieldState.invalid}>
                 <FieldLabel htmlFor="c-name">Name</FieldLabel>
                 <Input {...field} id="c-name" placeholder="my-shop" aria-invalid={fieldState.invalid} />
+                <FieldError errors={[fieldState.error]} />
+              </Field>
+            )}
+          />
+          <Controller
+            name="adminEmail"
+            control={control}
+            render={({ field, fieldState }) => (
+              <Field data-invalid={fieldState.invalid}>
+                <FieldLabel htmlFor="c-admin-email">Admin email</FieldLabel>
+                <Input
+                  {...field}
+                  id="c-admin-email"
+                  type="email"
+                  placeholder="admin@example.com"
+                  aria-invalid={fieldState.invalid}
+                />
                 <FieldError errors={[fieldState.error]} />
               </Field>
             )}
