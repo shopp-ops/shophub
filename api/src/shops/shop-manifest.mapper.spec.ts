@@ -9,6 +9,7 @@ const shop = {
   availabilityTier: AvailabilityTier.STANDARD,
   databaseType: DatabaseType.LIGHT,
   walletAddress: '0xabc',
+  adminEmail: 'admin@shop.local',
 } as Shop;
 
 describe('toShopManifest', () => {
@@ -19,6 +20,7 @@ describe('toShopManifest', () => {
       availability: 'standard',
       database: 'light',
       walletAddress: '0xabc',
+      adminEmail: 'admin@shop.local',
       apiImage: 'ghcr.io/shopp-ops/shop-api:1',
       webImage: 'ghcr.io/shopp-ops/shop-web:1',
       host: 'shophub.my-shop-7c9e6679.local',

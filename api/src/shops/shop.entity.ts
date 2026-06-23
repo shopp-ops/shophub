@@ -28,6 +28,9 @@ export class Shop {
   @Column({ type: 'varchar', nullable: true })
   walletAddress: string | null;
 
+  @Column()
+  adminEmail: string;
+
   @ManyToOne(() => User)
   user: User;
 

@@ -75,6 +75,7 @@ describe('ShopService', () => {
   describe('create', () => {
     const dto = {
       name: 'my-shop',
+      adminEmail: 'admin@shop.local',
       availabilityTier: AvailabilityTier.STANDARD,
       walletAddress: '0x123',
       databaseType: DatabaseType.STANDARD,

@@ -175,6 +175,7 @@ export class ShopResourceService {
         database: { type: m.database },
         apiImage: m.apiImage,
         webImage: m.webImage,
+        adminEmail: m.adminEmail,
         ...(m.walletAddress ? { walletAddress: m.walletAddress } : {}),
         ...(m.host ? { host: m.host } : {}),
         ...(m.discordChannelRef ? { discordChannelRef: m.discordChannelRef } : {}),

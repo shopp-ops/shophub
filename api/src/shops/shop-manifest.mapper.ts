@@ -17,6 +17,7 @@ export function toShopManifest(shop: Shop, cfg: ShopManifestConfig): ShopManifes
     availability: shop.availabilityTier as ShopManifest['availability'],
     database: shop.databaseType as ShopManifest['database'],
     walletAddress: shop.walletAddress ?? undefined,
+    adminEmail: shop.adminEmail,
     apiImage: cfg.apiImage,
     webImage: cfg.webImage,
     host: `shophub.${crName}.${cfg.hostSuffix}`,

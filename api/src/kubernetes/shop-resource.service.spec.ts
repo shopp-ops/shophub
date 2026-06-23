@@ -27,6 +27,7 @@ const manifest: ShopManifest = {
   database: 'light',
   apiImage: 'ghcr.io/shopp-ops/shop-api:1.0.0',
   webImage: 'ghcr.io/shopp-ops/shop-web:1.0.0',
+  adminEmail: 'admin@shop.local',
   walletAddress: '0xabc',
 };
 
@@ -69,6 +70,7 @@ describe('ShopResourceService.createShop', () => {
           database: { type: 'light' },
           apiImage: 'ghcr.io/shopp-ops/shop-api:1.0.0',
           webImage: 'ghcr.io/shopp-ops/shop-web:1.0.0',
+          adminEmail: 'admin@shop.local',
           walletAddress: '0xabc',
         },
       },

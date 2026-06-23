@@ -18,6 +18,7 @@ const USER_B = { email: 'user-b@example.com', password: 'password123' };
 
 const VALID_SHOP = {
   name: 'test-shop',
+  adminEmail: 'admin@test-shop.local',
   availabilityTier: 'standard',
   walletAddress: '0xabc123',
   databaseType: 'standard',
@@ -376,6 +377,7 @@ describe('Shops (e2e)', () => {
           metadata: { name: crName },
           spec: {
             name: 'walletstatus-shop',
+            adminEmail: 'admin@walletstatus.local',
             availability: 'standard',
             database: { type: 'standard' },
             apiImage: 'ghcr.io/x/api:1',
@@ -434,6 +436,7 @@ describe('Shops (e2e)', () => {
           metadata: { name: crName },
           spec: {
             name: 'ready-shop',
+            adminEmail: 'admin@ready-shop.local',
             availability: 'standard',
             database: { type: 'standard' },
             apiImage: 'ghcr.io/x/api:1',
