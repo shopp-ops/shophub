@@ -118,8 +118,8 @@ describe('ShopResourceService get/patch/delete', () => {
       deleteNamespace: jest.fn().mockResolvedValue({}),
       readNamespacedSecret: jest.fn().mockResolvedValue({
         data: {
-          email: Buffer.from('admin@shop.local').toString('base64'),
-          password: Buffer.from('s3cret').toString('base64'),
+          'admin-email': Buffer.from('admin@shop.local').toString('base64'),
+          'admin-password': Buffer.from('s3cret').toString('base64'),
         },
       }),
     };

@@ -101,8 +101,8 @@ export class ShopResourceService {
       });
       const data = (secret.data ?? {}) as Record<string, string>;
       return {
-        email: Buffer.from(data.email ?? '', 'base64').toString('utf8'),
-        password: Buffer.from(data.password ?? '', 'base64').toString('utf8'),
+        email: Buffer.from(data['admin-email'] ?? '', 'base64').toString('utf8'),
+        password: Buffer.from(data['admin-password'] ?? '', 'base64').toString('utf8'),
       };
     } catch (error) {
       throw mapK8sError(error);

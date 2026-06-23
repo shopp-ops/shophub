@@ -354,7 +354,7 @@ describe('Shops (e2e)', () => {
         namespace,
         body: {
           metadata: { name: `${crName}-admin-credentials` },
-          stringData: { email: 'admin@shop.local', password: 's3cret' },
+          stringData: { 'admin-email': 'admin@shop.local', 'admin-password': 's3cret' },
         },
       });
 
