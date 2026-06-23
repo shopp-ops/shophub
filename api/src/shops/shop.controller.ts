@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CreateShopDto } from './dto/create-shop.dto';
 import { UpdateShopDto } from './dto/update-shop.dto';
+import { CreateShopResult } from './create-shop-result.interface';
 import { ShopService } from './shop.service';
 
 @Controller('shops')
@@ -24,7 +25,7 @@ export class ShopController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  create(@Request() req: { user: AuthenticatedUser }, @Body() dto: CreateShopDto) {
+  create(@Request() req: { user: AuthenticatedUser }, @Body() dto: CreateShopDto): Promise<CreateShopResult> {
     return this.shopService.create(req.user.userId, dto);
   }
 

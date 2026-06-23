@@ -6,7 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { shopsApi, type Shop } from "@/lib/api/shops";
+import { shopsApi, type AdminCredentials, type CreateShopResult, type Shop } from "@/lib/api/shops";
+import { AdminCredentialsModal } from "@/components/admin-credentials-modal";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,7 +87,7 @@ function CreateShopDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreated: (shop: Shop) => void;
+  onCreated: (result: CreateShopResult) => void;
   token: string;
 }) {
   const [serverError, setServerError] = useState<string | null>(null);
@@ -98,8 +99,8 @@ function CreateShopDialog({
   async function onSubmit(data: CreateFormData) {
     setServerError(null);
     try {
-      const shop = await shopsApi.create(token, data);
-      onCreated(shop);
+      const result = await shopsApi.create(token, data);
+      onCreated(result);
       reset();
       onOpenChange(false);
     } catch (err) {
@@ -452,6 +453,17 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingShop, setEditingShop] = useState<Shop | null>(null);
   const [deletingShop, setDeletingShop] = useState<Shop | null>(null);
+  const [newCredentials, setNewCredentials] = useState<AdminCredentials | null>(null);
+  const [credentialsWarning, setCredentialsWarning] = useState<string | null>(null);
+
+  function handleCreated(result: CreateShopResult) {
+    setShops((prev) => [result.shop, ...prev]);
+    if (result.adminCredentials) {
+      setNewCredentials(result.adminCredentials);
+    } else if (result.credentialsError) {
+      setCredentialsWarning(result.credentialsError);
+    }
+  }
 
   const fetchShops = useCallback(async () => {
     if (!token) return;
@@ -493,6 +505,17 @@ export default function DashboardPage() {
         </Alert>
       )}
 
+      {credentialsWarning && (
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-4">
+            <span>{credentialsWarning}</span>
+            <Button variant="outline" size="sm" onClick={() => setCredentialsWarning(null)}>
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {!loading && !error && shops.length === 0 && (
         <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-dashed">
           <p className="text-sm font-medium">No shops yet</p>
@@ -520,9 +543,16 @@ export default function DashboardPage() {
       <CreateShopDialog
         open={showCreate}
         onOpenChange={setShowCreate}
-        onCreated={(shop) => setShops((prev) => [shop, ...prev])}
+        onCreated={handleCreated}
         token={token!}
       />
+
+      {newCredentials && (
+        <AdminCredentialsModal
+          credentials={newCredentials}
+          onClose={() => setNewCredentials(null)}
+        />
+      )}
 
       {editingShop && (
         <EditShopDialog

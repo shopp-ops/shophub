@@ -24,11 +24,22 @@ export type UpdateShopDto = {
   databaseType?: "standard" | "light";
 };
 
+export type AdminCredentials = {
+  email: string;
+  password: string;
+};
+
+export type CreateShopResult = {
+  shop: Shop;
+  adminCredentials: AdminCredentials | null;
+  credentialsError?: string;
+};
+
 export const shopsApi = {
   list: (token: string) => request<Shop[]>("/shops", {}, token),
 
   create: (token: string, dto: CreateShopDto) =>
-    request<Shop>("/shops", { method: "POST", body: JSON.stringify(dto) }, token),
+    request<CreateShopResult>("/shops", { method: "POST", body: JSON.stringify(dto) }, token),
 
   update: (token: string, id: string, dto: UpdateShopDto) =>
     request<Shop>(`/shops/${id}`, { method: "PATCH", body: JSON.stringify(dto) }, token),

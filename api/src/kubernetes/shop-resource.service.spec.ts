@@ -14,7 +14,7 @@ jest.mock('@kubernetes/client-node', () => ({
   CoreV1Api: class CoreV1Api {},
 }));
 
-import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ApiException } from '@kubernetes/client-node';
 import { ShopResourceService } from './shop-resource.service';
 import { KubernetesClientProvider } from './kubernetes-client.provider';
@@ -103,7 +103,7 @@ describe('ShopResourceService get/patch/delete', () => {
     patchNamespacedCustomObject: jest.Mock;
     deleteNamespacedCustomObject: jest.Mock;
   };
-  let core: { deleteNamespace: jest.Mock };
+  let core: { deleteNamespace: jest.Mock; readNamespacedSecret: jest.Mock };
   let service: ShopResourceService;
 
   beforeEach(() => {
@@ -112,7 +112,15 @@ describe('ShopResourceService get/patch/delete', () => {
       patchNamespacedCustomObject: jest.fn().mockResolvedValue({}),
       deleteNamespacedCustomObject: jest.fn().mockResolvedValue({}),
     };
-    core = { deleteNamespace: jest.fn().mockResolvedValue({}) };
+    core = {
+      deleteNamespace: jest.fn().mockResolvedValue({}),
+      readNamespacedSecret: jest.fn().mockResolvedValue({
+        data: {
+          email: Buffer.from('admin@shop.local').toString('base64'),
+          password: Buffer.from('s3cret').toString('base64'),
+        },
+      }),
+    };
     const client = {
       customObjectsApi: () => custom,
       coreV1Api: () => core,
@@ -168,5 +176,46 @@ describe('ShopResourceService get/patch/delete', () => {
   it('deleteShopNamespace deletes the namespace', async () => {
     await service.deleteShopNamespace('shop-ns');
     expect(core.deleteNamespace).toHaveBeenCalledWith({ name: 'shop-ns' });
+  });
+
+  it('waitForReady resolves once the Ready condition is True', async () => {
+    custom.getNamespacedCustomObject
+      .mockResolvedValueOnce({ status: { conditions: [{ type: 'Ready', status: 'False' }] } })
+      .mockResolvedValueOnce({ status: { conditions: [{ type: 'Ready', status: 'True' }] } });
+    await expect(
+      service.waitForReady('shop-ns', 'my-shop-7c9e6679', { pollMs: 1, timeoutMs: 1000 }),
+    ).resolves.toBeUndefined();
+    expect(custom.getNamespacedCustomObject).toHaveBeenCalledTimes(2);
+  });
+
+  it('waitForReady throws ServiceUnavailable on timeout', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: { conditions: [] } });
+    await expect(service.waitForReady('shop-ns', 'x', { pollMs: 1, timeoutMs: 10 })).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+
+  it('waitForReady coerces string opts (no infinite loop on string env config)', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: { conditions: [] } });
+    await expect(
+      service.waitForReady('shop-ns', 'x', {
+        pollMs: '1' as unknown as number,
+        timeoutMs: '10' as unknown as number,
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('readAdminCredentials reads and base64-decodes the secret', async () => {
+    const creds = await service.readAdminCredentials('shop-ns', 'my-shop-7c9e6679');
+    expect(core.readNamespacedSecret).toHaveBeenCalledWith({
+      name: 'my-shop-7c9e6679-admin-credentials',
+      namespace: 'shop-ns',
+    });
+    expect(creds).toEqual({ email: 'admin@shop.local', password: 's3cret' });
+  });
+
+  it('readAdminCredentials maps a 404 to NotFoundException', async () => {
+    core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
+    await expect(service.readAdminCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });
