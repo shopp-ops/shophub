@@ -25,8 +25,11 @@ export class Shop {
   @Column({ type: 'enum', enum: DatabaseType })
   databaseType: DatabaseType;
 
+  @Column({ type: 'varchar', nullable: true })
+  walletAddress: string | null;
+
   @Column()
-  walletAddress: string;
+  adminEmail: string;
 
   @ManyToOne(() => User)
   user: User;

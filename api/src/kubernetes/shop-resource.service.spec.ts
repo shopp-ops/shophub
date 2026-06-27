@@ -27,6 +27,7 @@ const manifest: ShopManifest = {
   database: 'light',
   apiImage: 'ghcr.io/shopp-ops/shop-api:1.0.0',
   webImage: 'ghcr.io/shopp-ops/shop-web:1.0.0',
+  adminEmail: 'admin@shop.local',
   walletAddress: '0xabc',
 };
 
@@ -69,6 +70,7 @@ describe('ShopResourceService.createShop', () => {
           database: { type: 'light' },
           apiImage: 'ghcr.io/shopp-ops/shop-api:1.0.0',
           webImage: 'ghcr.io/shopp-ops/shop-web:1.0.0',
+          adminEmail: 'admin@shop.local',
           walletAddress: '0xabc',
         },
       },
@@ -116,8 +118,8 @@ describe('ShopResourceService get/patch/delete', () => {
       deleteNamespace: jest.fn().mockResolvedValue({}),
       readNamespacedSecret: jest.fn().mockResolvedValue({
         data: {
-          email: Buffer.from('admin@shop.local').toString('base64'),
-          password: Buffer.from('s3cret').toString('base64'),
+          'admin-email': Buffer.from('admin@shop.local').toString('base64'),
+          'admin-password': Buffer.from('s3cret').toString('base64'),
         },
       }),
     };
@@ -217,5 +219,37 @@ describe('ShopResourceService get/patch/delete', () => {
   it('readAdminCredentials maps a 404 to NotFoundException', async () => {
     core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
     await expect(service.readAdminCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('readShopStatus returns the resolved walletAddress from status', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: { walletAddress: '0xfeed' } });
+    await expect(service.readShopStatus('shop-ns', 'my-shop-7c9e6679')).resolves.toEqual({
+      walletAddress: '0xfeed',
+    });
+  });
+
+  it('readShopStatus returns undefined walletAddress when status is empty', async () => {
+    custom.getNamespacedCustomObject.mockResolvedValue({ status: {} });
+    await expect(service.readShopStatus('shop-ns', 'x')).resolves.toEqual({ walletAddress: undefined });
+  });
+
+  it('readWalletCredentials reads and base64-decodes the keypair secret', async () => {
+    core.readNamespacedSecret.mockResolvedValue({
+      data: {
+        address: Buffer.from('0xabc').toString('base64'),
+        privateKey: Buffer.from('0xdeadbeef').toString('base64'),
+      },
+    });
+    const creds = await service.readWalletCredentials('shop-ns', 'my-shop-7c9e6679');
+    expect(core.readNamespacedSecret).toHaveBeenCalledWith({
+      name: 'wallet-my-shop-7c9e6679-wallet-keypair',
+      namespace: 'shop-ns',
+    });
+    expect(creds).toEqual({ address: '0xabc', privateKey: '0xdeadbeef' });
+  });
+
+  it('readWalletCredentials maps a 404 to NotFoundException', async () => {
+    core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
+    await expect(service.readWalletCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
 });

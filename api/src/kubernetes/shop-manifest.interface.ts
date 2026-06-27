@@ -5,6 +5,7 @@ export interface ShopManifest {
   database: 'standard' | 'light';
   apiImage: string;
   webImage: string;
+  adminEmail: string;
   walletAddress?: string;
   host?: string;
   discordChannelRef?: string;

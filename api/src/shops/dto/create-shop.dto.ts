@@ -1,4 +1,4 @@
-import { IsEnum, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { AvailabilityTier, DatabaseType } from '../shop.entity';
 
 export class CreateShopDto {
@@ -6,11 +6,15 @@ export class CreateShopDto {
   @MinLength(2)
   name: string;
 
+  @IsEmail()
+  adminEmail: string;
+
   @IsEnum(AvailabilityTier)
   availabilityTier: AvailabilityTier;
 
   @IsString()
-  walletAddress: string;
+  @IsOptional()
+  walletAddress?: string;
 
   @IsEnum(DatabaseType)
   databaseType: DatabaseType;

@@ -6,8 +6,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
-import { shopsApi, type AdminCredentials, type CreateShopResult, type Shop } from "@/lib/api/shops";
-import { AdminCredentialsModal } from "@/components/admin-credentials-modal";
+import {
+  shopsApi,
+  type AdminCredentials,
+  type CreateShopResult,
+  type Shop,
+  type WalletCredentials,
+} from "@/lib/api/shops";
+import { CredentialsModal } from "@/components/admin-credentials-modal";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,12 +37,19 @@ import {
 
 // ─── schemas ────────────────────────────────────────────────────────────────
 
-const createSchema = z.object({
-  name: z.string().min(2, "At least 2 characters"),
-  availabilityTier: z.enum(["standard", "high"]),
-  walletAddress: z.string().min(1, "Required"),
-  databaseType: z.enum(["standard", "light"]),
-});
+const createSchema = z
+  .object({
+    name: z.string().min(2, "At least 2 characters"),
+    adminEmail: z.string().email("Valid email required"),
+    availabilityTier: z.enum(["standard", "high"]),
+    autoGenerateWallet: z.boolean(),
+    walletAddress: z.string(),
+    databaseType: z.enum(["standard", "light"]),
+  })
+  .refine((d) => d.autoGenerateWallet || d.walletAddress.trim().length > 0, {
+    message: "Required",
+    path: ["walletAddress"],
+  });
 
 const editSchema = z.object({
   availabilityTier: z.enum(["standard", "high"]),
@@ -91,15 +104,29 @@ function CreateShopDialog({
   token: string;
 }) {
   const [serverError, setServerError] = useState<string | null>(null);
-  const { control, handleSubmit, reset, formState: { isSubmitting } } = useForm<CreateFormData>({
+  const { control, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm<CreateFormData>({
     resolver: zodResolver(createSchema),
-    defaultValues: { name: "", availabilityTier: "standard", walletAddress: "", databaseType: "standard" },
+    defaultValues: {
+      name: "",
+      adminEmail: "",
+      availabilityTier: "standard",
+      autoGenerateWallet: true,
+      walletAddress: "",
+      databaseType: "standard",
+    },
   });
+  const autoGenerateWallet = watch("autoGenerateWallet");
 
   async function onSubmit(data: CreateFormData) {
     setServerError(null);
     try {
-      const result = await shopsApi.create(token, data);
+      const result = await shopsApi.create(token, {
+        name: data.name,
+        adminEmail: data.adminEmail,
+        availabilityTier: data.availabilityTier,
+        databaseType: data.databaseType,
+        ...(data.autoGenerateWallet ? {} : { walletAddress: data.walletAddress.trim() }),
+      });
       onCreated(result);
       reset();
       onOpenChange(false);
@@ -132,6 +159,23 @@ function CreateShopDialog({
             )}
           />
           <Controller
+            name="adminEmail"
+            control={control}
+            render={({ field, fieldState }) => (
+              <Field data-invalid={fieldState.invalid}>
+                <FieldLabel htmlFor="c-admin-email">Admin email</FieldLabel>
+                <Input
+                  {...field}
+                  id="c-admin-email"
+                  type="email"
+                  placeholder="admin@example.com"
+                  aria-invalid={fieldState.invalid}
+                />
+                <FieldError errors={[fieldState.error]} />
+              </Field>
+            )}
+          />
+          <Controller
             name="availabilityTier"
             control={control}
             render={({ field, fieldState }) => (
@@ -143,16 +187,32 @@ function CreateShopDialog({
             )}
           />
           <Controller
-            name="walletAddress"
+            name="autoGenerateWallet"
             control={control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor="c-wallet">Wallet address</FieldLabel>
-                <Input {...field} id="c-wallet" placeholder="0x…" aria-invalid={fieldState.invalid} />
-                <FieldError errors={[fieldState.error]} />
-              </Field>
+            render={({ field }) => (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={field.value}
+                  onChange={(e) => field.onChange(e.target.checked)}
+                />
+                Auto-generate wallet
+              </label>
             )}
           />
+          {!autoGenerateWallet && (
+            <Controller
+              name="walletAddress"
+              control={control}
+              render={({ field, fieldState }) => (
+                <Field data-invalid={fieldState.invalid}>
+                  <FieldLabel htmlFor="c-wallet">Wallet address</FieldLabel>
+                  <Input {...field} id="c-wallet" placeholder="0x…" aria-invalid={fieldState.invalid} />
+                  <FieldError errors={[fieldState.error]} />
+                </Field>
+              )}
+            />
+          )}
           <Controller
             name="databaseType"
             control={control}
@@ -198,7 +258,7 @@ function EditShopDialog({
     resolver: zodResolver(editSchema),
     defaultValues: {
       availabilityTier: shop.availabilityTier,
-      walletAddress: shop.walletAddress,
+      walletAddress: shop.walletAddress ?? "",
       databaseType: shop.databaseType,
     },
   });
@@ -207,7 +267,7 @@ function EditShopDialog({
     if (open) {
       reset({
         availabilityTier: shop.availabilityTier,
-        walletAddress: shop.walletAddress,
+        walletAddress: shop.walletAddress ?? "",
         databaseType: shop.databaseType,
       });
       setServerError(null);
@@ -397,7 +457,9 @@ function ShopCard({
       <CardContent className="flex flex-1 flex-col justify-between gap-4">
         <div>
           <p className="mb-0.5 text-xs font-medium text-muted-foreground">Wallet</p>
-          <p className="truncate font-mono text-xs">{shop.walletAddress}</p>
+          <p className="truncate font-mono text-xs">
+            {shop.walletAddress ?? <span className="not-italic text-muted-foreground">Pending…</span>}
+          </p>
         </div>
         <div className="flex gap-2">
           {/* Storefront URL — enabled once K8s integration provides the URL */}
@@ -453,13 +515,16 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingShop, setEditingShop] = useState<Shop | null>(null);
   const [deletingShop, setDeletingShop] = useState<Shop | null>(null);
-  const [newCredentials, setNewCredentials] = useState<AdminCredentials | null>(null);
+  const [newCredentials, setNewCredentials] = useState<{
+    admin: AdminCredentials;
+    wallet: WalletCredentials | null;
+  } | null>(null);
   const [credentialsWarning, setCredentialsWarning] = useState<string | null>(null);
 
   function handleCreated(result: CreateShopResult) {
     setShops((prev) => [result.shop, ...prev]);
     if (result.adminCredentials) {
-      setNewCredentials(result.adminCredentials);
+      setNewCredentials({ admin: result.adminCredentials, wallet: result.walletCredentials });
     } else if (result.credentialsError) {
       setCredentialsWarning(result.credentialsError);
     }
@@ -548,8 +613,9 @@ export default function DashboardPage() {
       />
 
       {newCredentials && (
-        <AdminCredentialsModal
-          credentials={newCredentials}
+        <CredentialsModal
+          adminCredentials={newCredentials.admin}
+          walletCredentials={newCredentials.wallet}
           onClose={() => setNewCredentials(null)}
         />
       )}

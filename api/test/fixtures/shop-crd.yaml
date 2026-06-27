@@ -57,6 +57,9 @@ spec:
           spec:
             description: spec defines the desired state of Shop
             properties:
+              adminEmail:
+                description: Email address for the shop admin.
+                type: string
               apiImage:
                 description: Docker image for the shop backend application.
                 type: string
@@ -92,6 +95,7 @@ spec:
                 description: Docker image for the shop frontend application.
                 type: string
             required:
+            - adminEmail
             - apiImage
             - availability
             - database
@@ -169,6 +173,9 @@ spec:
                 type: integer
               url:
                 description: Public URL of the shop (derived from spec.host).
+                type: string
+              walletAddress:
+                description: Resolved wallet address (operator-generated when spec.walletAddress is empty).
                 type: string
             type: object
         required:
