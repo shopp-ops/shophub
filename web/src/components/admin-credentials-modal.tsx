@@ -40,13 +40,44 @@ function CopyField({ id, label, value }: { id: string; label: string; value: str
 export function CredentialsModal({
   adminCredentials,
   walletCredentials,
+  notice,
   onClose,
 }: {
-  adminCredentials: AdminCredentials;
+  adminCredentials: AdminCredentials | null;
   walletCredentials: WalletCredentials | null;
+  /** When set, renders an informational notice instead of secret fields. */
+  notice?: "already-retrieved" | "not-ready";
   onClose: () => void;
 }) {
   const [acknowledged, setAcknowledged] = useState(false);
+
+  // ── Notice state: credentials unavailable — allow normal dismissal ────────
+  if (notice) {
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Credentials</DialogTitle>
+          </DialogHeader>
+          <Alert>
+            <AlertDescription>
+              {notice === "already-retrieved"
+                ? "Credentials have already been retrieved and cannot be shown again."
+                : "Shop is still provisioning. Credentials will be available once it is ready."}
+            </AlertDescription>
+          </Alert>
+          <DialogFooter>
+            <Button type="button" onClick={onClose}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // ── Credentials state: lock the modal until the user acknowledges ─────────
+  if (!adminCredentials) return null;
 
   return (
     <Dialog open onOpenChange={() => {}}>

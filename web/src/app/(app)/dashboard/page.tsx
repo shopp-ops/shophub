@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,8 @@ import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   shopsApi,
+  getShopCredentials,
+  CredentialsError,
   type AdminCredentials,
   type CreateShopResult,
   type Shop,
@@ -60,7 +62,28 @@ const editSchema = z.object({
 type CreateFormData = z.infer<typeof createSchema>;
 type EditFormData = z.infer<typeof editSchema>;
 
+// ─── constants ───────────────────────────────────────────────────────────────
+
+const TERMINAL = new Set(["Ready", "Failed", "Degraded"]);
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
+
+function StatusPill({ phase, reason }: { phase: string; reason: string | null }) {
+  const colourCls =
+    phase === "Ready"
+      ? "bg-green-500/10 text-green-700 border-green-500/20 dark:text-green-400"
+      : phase === "Failed" || phase === "Degraded"
+        ? "bg-red-500/10 text-red-700 border-red-500/20 dark:text-red-400"
+        : "bg-amber-500/10 text-amber-700 border-amber-500/20 dark:text-amber-400";
+  return (
+    <span
+      title={reason ?? ""}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${colourCls}`}
+    >
+      {phase || "Unknown"}
+    </span>
+  );
+}
 
 function TierSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
@@ -442,9 +465,8 @@ function ShopCard({
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base leading-snug">{shop.name}</CardTitle>
-          {/* Status badge — wired up once K8s integration lands */}
-          <span className="mt-0.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            Unknown
+          <span className="mt-0.5 shrink-0">
+            <StatusPill phase={shop.phase} reason={shop.statusReason} />
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5 pt-1">
@@ -515,27 +537,38 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingShop, setEditingShop] = useState<Shop | null>(null);
   const [deletingShop, setDeletingShop] = useState<Shop | null>(null);
-  const [newCredentials, setNewCredentials] = useState<{
-    admin: AdminCredentials;
-    wallet: WalletCredentials | null;
-  } | null>(null);
-  const [credentialsWarning, setCredentialsWarning] = useState<string | null>(null);
 
+  // Credentials modal — null when closed; notice overrides credential display.
+  const [credentialsModal, setCredentialsModal] = useState<{
+    adminCredentials: AdminCredentials | null;
+    walletCredentials: WalletCredentials | null;
+    notice?: "already-retrieved" | "not-ready";
+  } | null>(null);
+
+  // Polling: active while any shop is non-terminal.
+  const [pollingActive, setPollingActive] = useState(false);
+  // ID of the shop whose credentials we should fetch once it turns Ready.
+  const pendingShopIdRef = useRef<string | null>(null);
+
+  // ─── create handler (non-blocking) ───────────────────────────────────────
   function handleCreated(result: CreateShopResult) {
+    pendingShopIdRef.current = result.shop.id;
     setShops((prev) => [result.shop, ...prev]);
-    if (result.adminCredentials) {
-      setNewCredentials({ admin: result.adminCredentials, wallet: result.walletCredentials });
-    } else if (result.credentialsError) {
-      setCredentialsWarning(result.credentialsError);
-    }
+    setPollingActive(true);
   }
 
+  // ─── initial load ─────────────────────────────────────────────────────────
   const fetchShops = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      setShops(await shopsApi.list(token));
+      const list = await shopsApi.list(token);
+      setShops(list);
+      // Resume polling for any non-terminal shops that were already in progress.
+      if (list.some((s) => !TERMINAL.has(s.phase))) {
+        setPollingActive(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load shops");
     } finally {
@@ -544,6 +577,56 @@ export default function DashboardPage() {
   }, [token]);
 
   useEffect(() => { fetchShops(); }, [fetchShops]);
+
+  // ─── polling loop ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!pollingActive || !token) return;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const updated = await shopsApi.list(token);
+        setShops(updated);
+
+        // Check if the just-created shop reached a terminal phase.
+        const pendingId = pendingShopIdRef.current;
+        if (pendingId) {
+          const pending = updated.find((s) => s.id === pendingId);
+          if (pending?.phase === "Ready") {
+            pendingShopIdRef.current = null;
+            try {
+              const creds = await getShopCredentials(pendingId, token);
+              setCredentialsModal({
+                adminCredentials: creds.adminCredentials,
+                walletCredentials: creds.walletCredentials,
+              });
+            } catch (err) {
+              if (err instanceof CredentialsError && err.status === 410) {
+                setCredentialsModal({
+                  adminCredentials: null,
+                  walletCredentials: null,
+                  notice: "already-retrieved",
+                });
+              }
+              // 409: still provisioning despite Ready phase — leave pendingId null,
+              // keep polling; the modal won't open until credentials are obtainable.
+            }
+          } else if (pending && TERMINAL.has(pending.phase)) {
+            // Failed / Degraded — no credentials to fetch; clear tracking.
+            pendingShopIdRef.current = null;
+          }
+        }
+
+        // Stop polling once every shop has reached a terminal phase.
+        if (!updated.some((s) => !TERMINAL.has(s.phase))) {
+          setPollingActive(false);
+        }
+      } catch {
+        // Ignore transient poll errors silently.
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [pollingActive, token]);
 
   return (
     <div className="space-y-6">
@@ -567,17 +650,6 @@ export default function DashboardPage() {
       {!loading && error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {credentialsWarning && (
-        <Alert variant="destructive">
-          <AlertDescription className="flex items-center justify-between gap-4">
-            <span>{credentialsWarning}</span>
-            <Button variant="outline" size="sm" onClick={() => setCredentialsWarning(null)}>
-              Dismiss
-            </Button>
-          </AlertDescription>
         </Alert>
       )}
 
@@ -612,11 +684,12 @@ export default function DashboardPage() {
         token={token!}
       />
 
-      {newCredentials && (
+      {credentialsModal && (
         <CredentialsModal
-          adminCredentials={newCredentials.admin}
-          walletCredentials={newCredentials.wallet}
-          onClose={() => setNewCredentials(null)}
+          adminCredentials={credentialsModal.adminCredentials}
+          walletCredentials={credentialsModal.walletCredentials}
+          notice={credentialsModal.notice}
+          onClose={() => setCredentialsModal(null)}
         />
       )}
 
