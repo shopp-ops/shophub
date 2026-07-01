@@ -252,4 +252,19 @@ describe('ShopResourceService get/patch/delete', () => {
     core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
     await expect(service.readWalletCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('readShopPhase returns phase and the non-True Available condition message', async () => {
+    jest.spyOn(service, 'getShop').mockResolvedValue({
+      status: {
+        phase: 'Failed',
+        walletAddress: '0xabc',
+        conditions: [{ type: 'Available', status: 'False', reason: 'ImagePullBackOff', message: 'api: ImagePullBackOff' }],
+      },
+    });
+    await expect(service.readShopPhase('ns', 'crn')).resolves.toEqual({
+      phase: 'Failed',
+      reason: 'api: ImagePullBackOff',
+      walletAddress: '0xabc',
+    });
+  });
 });

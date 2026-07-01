@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -102,69 +102,11 @@ describe('ShopService', () => {
       expect(mockRepo.remove).toHaveBeenCalledWith(saved);
     });
 
-    it('returns admin credentials once the shop is Ready', async () => {
-      mockK8s.waitForReady.mockResolvedValue(undefined);
-      mockK8s.readAdminCredentials.mockResolvedValue({ email: 'admin@shop.local', password: 's3cret' });
+    it('create returns immediately after CR create without waiting for readiness', async () => {
       const result = await service.create('user-1', dto);
-      expect(result.shop).toEqual(saved);
-      expect(result.adminCredentials).toEqual({ email: 'admin@shop.local', password: 's3cret' });
-      expect(result.credentialsError).toBeUndefined();
-    });
-
-    it('returns credentialsError when readiness times out', async () => {
-      mockK8s.waitForReady.mockRejectedValue(new ServiceUnavailableException('timeout'));
-      const result = await service.create('user-1', dto);
-      expect(result.shop).toEqual(saved);
-      expect(result.adminCredentials).toBeNull();
-      expect(result.credentialsError).toContain('timeout');
-      expect(mockK8s.readAdminCredentials).not.toHaveBeenCalled();
-    });
-
-    it('returns credentialsError when the secret is missing', async () => {
-      mockK8s.waitForReady.mockResolvedValue(undefined);
-      mockK8s.readAdminCredentials.mockRejectedValue(new NotFoundException('no secret'));
-      const result = await service.create('user-1', dto);
-      expect(result.adminCredentials).toBeNull();
-      expect(result.credentialsError).toBeDefined();
-    });
-
-    describe('wallet', () => {
-      const autoDto = { ...dto, walletAddress: undefined };
-      const autoSaved = { ...saved, walletAddress: null as string | null };
-
-      beforeEach(() => {
-        mockRepo.create.mockReturnValue({ ...autoDto, userId: 'user-1' });
-        mockRepo.save.mockResolvedValue(autoSaved);
-      });
-
-      it('auto-gen: returns wallet credentials and persists the resolved address', async () => {
-        mockK8s.readShopStatus.mockResolvedValue({ walletAddress: '0xgenerated' });
-        mockK8s.readWalletCredentials.mockResolvedValue({ address: '0xgenerated', privateKey: '0xkey' });
-
-        const result = await service.create('user-1', autoDto);
-
-        expect(mockK8s.readWalletCredentials).toHaveBeenCalledWith('shop-my-shop-7c9e6679', 'my-shop-7c9e6679');
-        expect(result.walletCredentials).toEqual({ address: '0xgenerated', privateKey: '0xkey' });
-        expect(result.shop.walletAddress).toBe('0xgenerated');
-        expect(mockRepo.save).toHaveBeenLastCalledWith(expect.objectContaining({ walletAddress: '0xgenerated' }));
-      });
-
-      it('provided address: no wallet read, walletCredentials null', async () => {
-        const result = await service.create('user-1', dto);
-        expect(mockK8s.readWalletCredentials).not.toHaveBeenCalled();
-        expect(result.walletCredentials).toBeNull();
-      });
-
-      it('auto-gen: wallet read failure leaves walletCredentials null, admin creds still returned', async () => {
-        mockK8s.readShopStatus.mockResolvedValue({ walletAddress: '0xgenerated' });
-        mockK8s.readWalletCredentials.mockRejectedValue(new NotFoundException('no keypair'));
-
-        const result = await service.create('user-1', autoDto);
-
-        expect(result.walletCredentials).toBeNull();
-        expect(result.adminCredentials).toEqual({ email: 'a@b.c', password: 'pw' });
-        expect(result.credentialsError).toBeUndefined();
-      });
+      expect(mockK8s.createShop).toHaveBeenCalledTimes(1);
+      expect(mockK8s.waitForReady).not.toHaveBeenCalled();
+      expect(result).toEqual({ shop: expect.objectContaining({ name: dto.name }) });
     });
   });
 
