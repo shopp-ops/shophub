@@ -1,6 +1,4 @@
-import { request } from "./client";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+import { API_URL, request } from "./client";
 
 export type Shop = {
   id: string;

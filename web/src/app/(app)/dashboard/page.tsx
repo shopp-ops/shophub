@@ -592,23 +592,33 @@ export default function DashboardPage() {
         if (pendingId) {
           const pending = updated.find((s) => s.id === pendingId);
           if (pending?.phase === "Ready") {
-            pendingShopIdRef.current = null;
             try {
               const creds = await getShopCredentials(pendingId, token);
+              pendingShopIdRef.current = null;
               setCredentialsModal({
                 adminCredentials: creds.adminCredentials,
                 walletCredentials: creds.walletCredentials,
               });
             } catch (err) {
               if (err instanceof CredentialsError && err.status === 410) {
+                // Already retrieved once — stop tracking, show the notice.
+                pendingShopIdRef.current = null;
                 setCredentialsModal({
                   adminCredentials: null,
                   walletCredentials: null,
                   notice: "already-retrieved",
                 });
+              } else if (err instanceof CredentialsError && err.status === 409) {
+                // Ready phase but the operator hasn't materialised credentials
+                // yet — surface "still provisioning" and keep the pending ref
+                // so the next poll tick retries the fetch.
+                setCredentialsModal({
+                  adminCredentials: null,
+                  walletCredentials: null,
+                  notice: "not-ready",
+                });
               }
-              // 409: still provisioning despite Ready phase — leave pendingId null,
-              // keep polling; the modal won't open until credentials are obtainable.
+              // Any other error: keep the ref set so a later tick retries.
             }
           } else if (pending && TERMINAL.has(pending.phase)) {
             // Failed / Degraded — no credentials to fetch; clear tracking.
@@ -616,8 +626,12 @@ export default function DashboardPage() {
           }
         }
 
-        // Stop polling once every shop has reached a terminal phase.
-        if (!updated.some((s) => !TERMINAL.has(s.phase))) {
+        // Stop polling once every shop is terminal AND no credential fetch is
+        // still outstanding (a Ready shop awaiting a 409 retry keeps polling).
+        if (
+          !updated.some((s) => !TERMINAL.has(s.phase)) &&
+          pendingShopIdRef.current === null
+        ) {
           setPollingActive(false);
         }
       } catch {
