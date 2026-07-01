@@ -157,8 +157,8 @@ describe('Shops (e2e)', () => {
 
       expect(res.body.shop.name).toBe('auto-wallet');
       expect(res.body.shop.walletAddress).toBeNull();
-      // No operator → not Ready → no wallet credentials surfaced.
-      expect(res.body.walletCredentials).toBeNull();
+      // Credentials are now fetched separately via GET /shops/:id/credentials.
+      expect(res.body.walletCredentials).toBeUndefined();
 
       const { namespace, crName } = buildShopIdentity(res.body.shop.id, 'auto-wallet');
       const cr = await k8s.getNamespacedCustomObject({
@@ -328,7 +328,7 @@ describe('Shops (e2e)', () => {
     const version = 'v1';
     const plural = 'shops';
 
-    it('returns credentialsError when nothing marks the shop Ready', async () => {
+    it('POST /shops returns 201 fast with { shop } only — no credentials in response', async () => {
       const res = await request(app.getHttpServer())
         .post('/shops')
         .set('Authorization', `Bearer ${tokenA}`)
@@ -336,14 +336,30 @@ describe('Shops (e2e)', () => {
         .expect(201);
 
       expect(res.body.shop).toBeDefined();
-      expect(res.body.adminCredentials).toBeNull();
-      expect(res.body.credentialsError).toBeDefined();
+      expect(res.body.adminCredentials).toBeUndefined();
+      expect(res.body.credentialsError).toBeUndefined();
+    }, 30_000);
 
-      const get = await request(app.getHttpServer())
-        .get(`/shops/${res.body.shop.id}`)
+    it('GET /shops/:id/credentials returns 401 without token', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/shops')
         .set('Authorization', `Bearer ${tokenA}`)
-        .expect(200);
-      expect(get.body.adminCredentials).toBeUndefined();
+        .send({ ...VALID_SHOP, name: 'shop-creds-unauth' })
+        .expect(201);
+      return request(app.getHttpServer()).get(`/shops/${res.body.shop.id}/credentials`).expect(401);
+    }, 30_000);
+
+    it('GET /shops/:id/credentials returns 409 while shop is not Ready (no operator)', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/shops')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...VALID_SHOP, name: 'shop-creds-notready' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .get(`/shops/${res.body.shop.id}/credentials`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(409);
     }, 30_000);
 
     it('readAdminCredentials decodes a real Secret from the cluster', async () => {

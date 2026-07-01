@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, GoneException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -9,6 +9,7 @@ import { UpdateShopDto } from './dto/update-shop.dto';
 import { CreateShopResult } from './create-shop-result.interface';
 import { ShopManifestConfig, mapUpdateToSpec, toShopManifest } from './shop-manifest.mapper';
 import { Shop } from './shop.entity';
+import { ShopView } from './shop-view.interface';
 
 @Injectable()
 export class ShopService {
@@ -27,8 +28,41 @@ export class ShopService {
     return shop;
   }
 
-  findAllByUser(userId: string): Promise<Shop[]> {
-    return this.repo.findBy({ userId });
+  private async toView(shop: Shop): Promise<ShopView> {
+    const { namespace, crName } = buildShopIdentity(shop.id, shop.name);
+    try {
+      const { phase, reason } = await this.k8s.readShopPhase(namespace, crName);
+      return Object.assign(shop, { phase, statusReason: reason });
+    } catch {
+      return Object.assign(shop, { phase: 'Unknown', statusReason: null });
+    }
+  }
+
+  async findAllByUser(userId: string): Promise<ShopView[]> {
+    const shops = await this.repo.findBy({ userId });
+    return Promise.all(shops.map((s) => this.toView(s)));
+  }
+
+  async findViewForUser(id: string, userId: string): Promise<ShopView> {
+    return this.toView(await this.findByIdForUser(id, userId));
+  }
+
+  async getCredentials(id: string, userId: string) {
+    const shop = await this.findByIdForUser(id, userId);
+    const { namespace, crName } = buildShopIdentity(shop.id, shop.name);
+    const { phase } = await this.k8s.readShopPhase(namespace, crName);
+    if (phase !== 'Ready') {
+      throw new ConflictException(`Shop is not ready (phase: ${phase})`);
+    }
+    if (shop.credentialsViewedAt) {
+      throw new GoneException('Credentials have already been retrieved');
+    }
+    const adminCredentials = await this.k8s.readAdminCredentials(namespace, crName);
+    const autoGenerate = !shop.walletAddress;
+    const walletCredentials = await this.resolveWallet(shop, autoGenerate, namespace, crName);
+    shop.credentialsViewedAt = new Date();
+    await this.repo.save(shop);
+    return { shop, adminCredentials, walletCredentials };
   }
 
   async create(userId: string, dto: CreateShopDto): Promise<CreateShopResult> {

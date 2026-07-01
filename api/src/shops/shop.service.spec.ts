@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, GoneException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -22,6 +22,7 @@ const mockK8s = {
   readAdminCredentials: jest.fn().mockResolvedValue({ email: 'a@b.c', password: 'pw' }),
   readShopStatus: jest.fn().mockResolvedValue({ walletAddress: undefined }),
   readWalletCredentials: jest.fn().mockResolvedValue({ address: '0xgen', privateKey: '0xpriv' }),
+  readShopPhase: jest.fn().mockResolvedValue({ phase: 'Progressing', reason: null }),
 };
 
 const mockConfig = {
@@ -43,6 +44,7 @@ describe('ShopService', () => {
     mockK8s.readAdminCredentials.mockResolvedValue({ email: 'a@b.c', password: 'pw' });
     mockK8s.readShopStatus.mockResolvedValue({ walletAddress: undefined });
     mockK8s.readWalletCredentials.mockResolvedValue({ address: '0xgen', privateKey: '0xpriv' });
+    mockK8s.readShopPhase.mockResolvedValue({ phase: 'Progressing', reason: null });
     const module = await Test.createTestingModule({
       providers: [
         ShopService,
@@ -202,6 +204,67 @@ describe('ShopService', () => {
       mockK8s.deleteShopNamespace.mockRejectedValue(new Error('delete failed'));
       await expect(service.remove(shop.id, 'user-1')).rejects.toThrow('delete failed');
       expect(mockRepo.save).toHaveBeenCalledWith({ ...shop });
+    });
+  });
+
+  describe('findAllByUser', () => {
+    const shopRow = {
+      id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      userId: 'user-1',
+      name: 'my-shop',
+      adminEmail: 'admin@shop.local',
+      availabilityTier: AvailabilityTier.STANDARD,
+      databaseType: DatabaseType.STANDARD,
+      walletAddress: '0x123',
+      credentialsViewedAt: null as Date | null,
+    };
+
+    it('attaches live phase and reason from the CR', async () => {
+      mockRepo.findBy.mockResolvedValue([shopRow]);
+      jest.spyOn(mockK8s, 'readShopPhase').mockResolvedValue({ phase: 'Failed', reason: 'api: ImagePullBackOff' });
+      const [view] = await service.findAllByUser(shopRow.userId);
+      expect(view.phase).toBe('Failed');
+      expect(view.statusReason).toBe('api: ImagePullBackOff');
+    });
+
+    it('falls back to Unknown phase and null reason when readShopPhase throws', async () => {
+      mockRepo.findBy.mockResolvedValue([shopRow]);
+      jest.spyOn(mockK8s, 'readShopPhase').mockRejectedValue(new Error('k8s down'));
+      const [view] = await service.findAllByUser(shopRow.userId);
+      expect(view.phase).toBe('Unknown');
+      expect(view.statusReason).toBeNull();
+    });
+  });
+
+  describe('getCredentials', () => {
+    const shopForCreds = {
+      id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+      userId: 'user-1',
+      name: 'my-shop',
+      adminEmail: 'admin@shop.local',
+      availabilityTier: AvailabilityTier.STANDARD,
+      databaseType: DatabaseType.STANDARD,
+      walletAddress: '0x123',
+      credentialsViewedAt: null as Date | null,
+    };
+
+    beforeEach(() => {
+      shopForCreds.credentialsViewedAt = null;
+      mockRepo.findOneBy.mockResolvedValue(shopForCreds);
+      mockRepo.save.mockResolvedValue(shopForCreds);
+    });
+
+    it('returns 409 when the shop is not Ready', async () => {
+      jest.spyOn(mockK8s, 'readShopPhase').mockResolvedValue({ phase: 'Progressing', reason: null });
+      await expect(service.getCredentials(shopForCreds.id, shopForCreds.userId)).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('returns creds once, then 410 Gone on the second call', async () => {
+      jest.spyOn(mockK8s, 'readShopPhase').mockResolvedValue({ phase: 'Ready', reason: null });
+      jest.spyOn(mockK8s, 'readAdminCredentials').mockResolvedValue({ email: 'a@b.c', password: 'pw' });
+      const first = await service.getCredentials(shopForCreds.id, shopForCreds.userId);
+      expect(first.adminCredentials?.password).toBe('pw');
+      await expect(service.getCredentials(shopForCreds.id, shopForCreds.userId)).rejects.toBeInstanceOf(GoneException);
     });
   });
 });

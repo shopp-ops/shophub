@@ -267,4 +267,24 @@ describe('ShopResourceService get/patch/delete', () => {
       walletAddress: '0xabc',
     });
   });
+
+  it('readShopPhase defaults phase to Progressing when status.phase is absent', async () => {
+    jest.spyOn(service, 'getShop').mockResolvedValue({ status: {} });
+    await expect(service.readShopPhase('ns', 'crn')).resolves.toMatchObject({
+      phase: 'Progressing',
+    });
+  });
+
+  it('readShopPhase returns reason null when Available condition status is True', async () => {
+    jest.spyOn(service, 'getShop').mockResolvedValue({
+      status: {
+        phase: 'Ready',
+        conditions: [{ type: 'Available', status: 'True', message: 'All good' }],
+      },
+    });
+    await expect(service.readShopPhase('ns', 'crn')).resolves.toMatchObject({
+      phase: 'Ready',
+      reason: null,
+    });
+  });
 });

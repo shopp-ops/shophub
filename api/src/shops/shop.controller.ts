@@ -36,7 +36,12 @@ export class ShopController {
 
   @Get(':id')
   findOne(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string) {
-    return this.shopService.findByIdForUser(id, req.user.userId);
+    return this.shopService.findViewForUser(id, req.user.userId);
+  }
+
+  @Get(':id/credentials')
+  getCredentials(@Request() req: { user: AuthenticatedUser }, @Param('id') id: string) {
+    return this.shopService.getCredentials(id, req.user.userId);
   }
 
   @Patch(':id')
