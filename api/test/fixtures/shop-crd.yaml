@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.1
-  name: shops.shopops.shopops.dc.com
+  name: shops.shopops.com
 spec:
-  group: shopops.shopops.dc.com
+  group: shopops.com
   names:
     kind: Shop
     listKind: ShopList

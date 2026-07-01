@@ -39,7 +39,7 @@ async function applyShopCrd(kubeConfigYaml: string): Promise<void> {
   const co = kc.makeApiClient(CustomObjectsApi);
   for (let i = 0; i < 30; i++) {
     try {
-      await co.listClusterCustomObject({ group: 'shopops.shopops.dc.com', version: 'v1', plural: 'shops' });
+      await co.listClusterCustomObject({ group: 'shopops.com', version: 'v1', plural: 'shops' });
       return;
     } catch {
       await new Promise((r) => setTimeout(r, 1000));
@@ -130,7 +130,7 @@ describe('Shops (e2e)', () => {
 
       const { namespace, crName } = buildShopIdentity(res.body.shop.id, 'cr-check');
       const cr = await k8s.getNamespacedCustomObject({
-        group: 'shopops.shopops.dc.com',
+        group: 'shopops.com',
         version: 'v1',
         namespace,
         plural: 'shops',
@@ -162,7 +162,7 @@ describe('Shops (e2e)', () => {
 
       const { namespace, crName } = buildShopIdentity(res.body.shop.id, 'auto-wallet');
       const cr = await k8s.getNamespacedCustomObject({
-        group: 'shopops.shopops.dc.com',
+        group: 'shopops.com',
         version: 'v1',
         namespace,
         plural: 'shops',
@@ -273,7 +273,7 @@ describe('Shops (e2e)', () => {
 
       const { namespace, crName } = buildShopIdentity(shopId, 'shop-for-update');
       const cr = await k8s.getNamespacedCustomObject({
-        group: 'shopops.shopops.dc.com',
+        group: 'shopops.com',
         version: 'v1',
         namespace,
         plural: 'shops',
@@ -324,7 +324,7 @@ describe('Shops (e2e)', () => {
   });
 
   describe('admin credentials', () => {
-    const group = 'shopops.shopops.dc.com';
+    const group = 'shopops.com';
     const version = 'v1';
     const plural = 'shops';
 

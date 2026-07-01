@@ -53,16 +53,16 @@ describe('ShopResourceService.createShop', () => {
       body: { metadata: { name: 'shop-my-shop-7c9e6679' } },
     });
     expect(custom.createNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
+      group: 'shopops.com',
       version: 'v1',
       namespace: 'shop-my-shop-7c9e6679',
       plural: 'shops',
       body: {
-        apiVersion: 'shopops.shopops.dc.com/v1',
+        apiVersion: 'shopops.com/v1',
         kind: 'Shop',
         metadata: {
           name: 'my-shop-7c9e6679',
-          labels: { 'shopops.dc.com/shop-id': manifest.id },
+          labels: { 'shopops.com/shop-id': manifest.id },
         },
         spec: {
           name: 'My Shop',
@@ -133,7 +133,7 @@ describe('ShopResourceService get/patch/delete', () => {
   it('getShop requests the CR by coordinates', async () => {
     const result = await service.getShop('shop-ns', 'my-shop-7c9e6679');
     expect(custom.getNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
+      group: 'shopops.com',
       version: 'v1',
       namespace: 'shop-ns',
       plural: 'shops',
@@ -151,7 +151,7 @@ describe('ShopResourceService get/patch/delete', () => {
     await service.patchShop('shop-ns', 'my-shop-7c9e6679', { availability: 'high' });
     expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith(
       {
-        group: 'shopops.shopops.dc.com',
+        group: 'shopops.com',
         version: 'v1',
         namespace: 'shop-ns',
         plural: 'shops',
@@ -167,7 +167,7 @@ describe('ShopResourceService get/patch/delete', () => {
   it('deleteShop deletes the CR', async () => {
     await service.deleteShop('shop-ns', 'my-shop-7c9e6679');
     expect(custom.deleteNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
+      group: 'shopops.com',
       version: 'v1',
       namespace: 'shop-ns',
       plural: 'shops',
