@@ -484,8 +484,23 @@ function ShopCard({
           </p>
         </div>
         <div className="flex gap-2">
-          {/* Storefront URL — enabled once K8s integration provides the URL */}
-          <Button variant="outline" size="sm" className="flex-1 gap-1" disabled title="Available after K8s integration">
+          {/* Storefront URL — enabled once the shop is Ready and the operator has set status.url */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 gap-1"
+            disabled={shop.phase !== "Ready" || !shop.url}
+            title={
+              shop.url
+                ? shop.phase === "Ready"
+                  ? shop.url
+                  : "Available once the shop is Ready"
+                : "Storefront URL not assigned yet"
+            }
+            onClick={() => {
+              if (shop.url) window.open(shop.url, "_blank", "noopener,noreferrer");
+            }}
+          >
             <ExternalLink />
             Visit
           </Button>

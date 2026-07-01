@@ -112,17 +112,23 @@ export class ShopResourceService {
   async readShopPhase(
     namespace: string,
     crName: string,
-  ): Promise<{ phase: string; reason: string | null; walletAddress?: string }> {
+  ): Promise<{ phase: string; reason: string | null; url: string | null; walletAddress?: string }> {
     const shop = (await this.getShop(namespace, crName)) as {
       status?: {
         phase?: string;
+        url?: string;
         walletAddress?: string;
         conditions?: { type: string; status: string; message?: string }[];
       };
     };
     const available = shop.status?.conditions?.find((c) => c.type === 'Available');
     const reason = available && available.status !== 'True' ? (available.message ?? null) : null;
-    return { phase: shop.status?.phase ?? 'Progressing', reason, walletAddress: shop.status?.walletAddress };
+    return {
+      phase: shop.status?.phase ?? 'Progressing',
+      reason,
+      url: shop.status?.url ?? null,
+      walletAddress: shop.status?.walletAddress,
+    };
   }
 
   async readShopStatus(namespace: string, crName: string): Promise<{ walletAddress?: string }> {

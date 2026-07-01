@@ -31,10 +31,10 @@ export class ShopService {
   private async toView(shop: Shop): Promise<ShopView> {
     const { namespace, crName } = buildShopIdentity(shop.id, shop.name);
     try {
-      const { phase, reason } = await this.k8s.readShopPhase(namespace, crName);
-      return Object.assign(shop, { phase, statusReason: reason });
+      const { phase, reason, url } = await this.k8s.readShopPhase(namespace, crName);
+      return Object.assign(shop, { phase, statusReason: reason, url });
     } catch {
-      return Object.assign(shop, { phase: 'Unknown', statusReason: null });
+      return Object.assign(shop, { phase: 'Unknown', statusReason: null, url: null });
     }
   }
 

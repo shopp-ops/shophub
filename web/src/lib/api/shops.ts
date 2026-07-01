@@ -13,6 +13,8 @@ export type Shop = {
   /** Live K8s phase: Progressing | Ready | Degraded | Failed | Unknown */
   phase: string;
   statusReason: string | null;
+  /** Storefront URL from the operator (status.url); null until the shop has a host. */
+  url: string | null;
 };
 
 export type CreateShopDto = {

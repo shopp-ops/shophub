@@ -257,6 +257,7 @@ describe('ShopResourceService get/patch/delete', () => {
     jest.spyOn(service, 'getShop').mockResolvedValue({
       status: {
         phase: 'Failed',
+        url: 'http://shophub.acme-1.127.0.0.1.sslip.io',
         walletAddress: '0xabc',
         conditions: [{ type: 'Available', status: 'False', reason: 'ImagePullBackOff', message: 'api: ImagePullBackOff' }],
       },
@@ -264,6 +265,7 @@ describe('ShopResourceService get/patch/delete', () => {
     await expect(service.readShopPhase('ns', 'crn')).resolves.toEqual({
       phase: 'Failed',
       reason: 'api: ImagePullBackOff',
+      url: 'http://shophub.acme-1.127.0.0.1.sslip.io',
       walletAddress: '0xabc',
     });
   });
