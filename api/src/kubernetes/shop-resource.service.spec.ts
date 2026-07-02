@@ -53,16 +53,16 @@ describe('ShopResourceService.createShop', () => {
       body: { metadata: { name: 'shop-my-shop-7c9e6679' } },
     });
     expect(custom.createNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
+      group: 'shopops.com',
       version: 'v1',
       namespace: 'shop-my-shop-7c9e6679',
       plural: 'shops',
       body: {
-        apiVersion: 'shopops.shopops.dc.com/v1',
+        apiVersion: 'shopops.com/v1',
         kind: 'Shop',
         metadata: {
           name: 'my-shop-7c9e6679',
-          labels: { 'shopops.dc.com/shop-id': manifest.id },
+          labels: { 'shopops.com/shop-id': manifest.id },
         },
         spec: {
           name: 'My Shop',
@@ -133,7 +133,7 @@ describe('ShopResourceService get/patch/delete', () => {
   it('getShop requests the CR by coordinates', async () => {
     const result = await service.getShop('shop-ns', 'my-shop-7c9e6679');
     expect(custom.getNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
+      group: 'shopops.com',
       version: 'v1',
       namespace: 'shop-ns',
       plural: 'shops',
@@ -151,7 +151,7 @@ describe('ShopResourceService get/patch/delete', () => {
     await service.patchShop('shop-ns', 'my-shop-7c9e6679', { availability: 'high' });
     expect(custom.patchNamespacedCustomObject).toHaveBeenCalledWith(
       {
-        group: 'shopops.shopops.dc.com',
+        group: 'shopops.com',
         version: 'v1',
         namespace: 'shop-ns',
         plural: 'shops',
@@ -167,7 +167,7 @@ describe('ShopResourceService get/patch/delete', () => {
   it('deleteShop deletes the CR', async () => {
     await service.deleteShop('shop-ns', 'my-shop-7c9e6679');
     expect(custom.deleteNamespacedCustomObject).toHaveBeenCalledWith({
-      group: 'shopops.shopops.dc.com',
+      group: 'shopops.com',
       version: 'v1',
       namespace: 'shop-ns',
       plural: 'shops',
@@ -251,5 +251,42 @@ describe('ShopResourceService get/patch/delete', () => {
   it('readWalletCredentials maps a 404 to NotFoundException', async () => {
     core.readNamespacedSecret.mockRejectedValue(new ApiException(404, 'gone', {}, {}));
     await expect(service.readWalletCredentials('shop-ns', 'x')).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('readShopPhase returns phase and the non-True Available condition message', async () => {
+    jest.spyOn(service, 'getShop').mockResolvedValue({
+      status: {
+        phase: 'Failed',
+        url: 'http://shophub.acme-1.127.0.0.1.sslip.io',
+        walletAddress: '0xabc',
+        conditions: [{ type: 'Available', status: 'False', reason: 'ImagePullBackOff', message: 'api: ImagePullBackOff' }],
+      },
+    });
+    await expect(service.readShopPhase('ns', 'crn')).resolves.toEqual({
+      phase: 'Failed',
+      reason: 'api: ImagePullBackOff',
+      url: 'http://shophub.acme-1.127.0.0.1.sslip.io',
+      walletAddress: '0xabc',
+    });
+  });
+
+  it('readShopPhase defaults phase to Progressing when status.phase is absent', async () => {
+    jest.spyOn(service, 'getShop').mockResolvedValue({ status: {} });
+    await expect(service.readShopPhase('ns', 'crn')).resolves.toMatchObject({
+      phase: 'Progressing',
+    });
+  });
+
+  it('readShopPhase returns reason null when Available condition status is True', async () => {
+    jest.spyOn(service, 'getShop').mockResolvedValue({
+      status: {
+        phase: 'Ready',
+        conditions: [{ type: 'Available', status: 'True', message: 'All good' }],
+      },
+    });
+    await expect(service.readShopPhase('ns', 'crn')).resolves.toMatchObject({
+      phase: 'Ready',
+      reason: null,
+    });
   });
 });

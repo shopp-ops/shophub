@@ -28,6 +28,9 @@ export class Shop {
   @Column({ type: 'varchar', nullable: true })
   walletAddress: string | null;
 
+  @Column({ type: 'timestamptz', nullable: true })
+  credentialsViewedAt: Date | null;
+
   @Column()
   adminEmail: string;
 
