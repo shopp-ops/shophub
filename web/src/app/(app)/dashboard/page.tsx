@@ -107,7 +107,7 @@ function DbSelect({ value, onChange }: { value: string; onChange: (v: string) =>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="standard">Standard (PostgreSQL)</SelectItem>
-        <SelectItem value="light">Light (Redis)</SelectItem>
+        <SelectItem value="light">Light (MongoDB)</SelectItem>
       </SelectContent>
     </Select>
   );
@@ -434,7 +434,7 @@ const TIER_LABELS: Record<Shop["availabilityTier"], string> = {
 
 const DB_LABELS: Record<Shop["databaseType"], string> = {
   standard: "PostgreSQL",
-  light: "Redis",
+  light: "MongoDB",
 };
 
 function Chip({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
