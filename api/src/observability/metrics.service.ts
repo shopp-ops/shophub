@@ -13,6 +13,24 @@ export class MetricsService {
 
     @InjectMetric('http_response_size_bytes')
     private readonly responseSize: Counter<string>,
+
+    @InjectMetric('shop_created_total')
+    public shopCreated: Counter<string>,
+
+    @InjectMetric('shop_deleted_total')
+    public shopDeleted: Counter<string>,
+
+    @InjectMetric('shop_fetched_total')
+    public shopFetched: Counter<string>,
+
+    @InjectMetric('shop_operation_duration_seconds')
+    public shopDuration: Histogram<string>,
+
+    @InjectMetric('user_created_total')
+    public userCreated: Counter<string>,
+
+    @InjectMetric('user_operation_duration_seconds')
+    public userDuration: Histogram<string>,
   ) {}
 
   record(method: string, route: string, status: number, durationSeconds: number, responseSize: number) {

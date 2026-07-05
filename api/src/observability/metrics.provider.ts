@@ -19,4 +19,38 @@ export const metricsProviders = [
     help: 'Response size in bytes',
     labelNames: ['route'],
   }),
+
+  makeCounterProvider({
+    name: 'shop_created_total',
+    help: 'Total number of shops created',
+  }),
+
+  makeCounterProvider({
+    name: 'shop_deleted_total',
+    help: 'Total number of shops deleted',
+  }),
+
+  makeCounterProvider({
+    name: 'shop_fetched_total',
+    help: 'Total number of shop fetch operations',
+  }),
+
+  makeHistogramProvider({
+    name: 'shop_operation_duration_seconds',
+    help: 'Duration of shop operations',
+    labelNames: ['operation'],
+    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  }),
+
+  makeCounterProvider({
+    name: 'user_created_total',
+    help: 'Total users created',
+  }),
+
+  makeHistogramProvider({
+    name: 'user_operation_duration_seconds',
+    help: 'Duration of user operations',
+    labelNames: ['operation'],
+    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  }),
 ];
