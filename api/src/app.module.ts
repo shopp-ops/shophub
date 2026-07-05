@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { KubernetesModule } from './kubernetes/kubernetes.module';
 import { ShopsModule } from './shops/shop.module';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
+import { ObservabilityModule } from './observability/observability.module';
 
 @Module({
   imports: [
@@ -23,7 +24,10 @@ import { PrometheusModule } from '@willsoto/nestjs-prometheus';
     AuthModule,
     KubernetesModule,
     ShopsModule,
-    PrometheusModule.register()
+    PrometheusModule.register({
+      path: '/metrics',
+    }),
+    ObservabilityModule,
   ],
   controllers: [AppController],
   providers: [AppService],
