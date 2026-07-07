@@ -16,7 +16,7 @@ import { ShopsModule } from './shops/shop.module';
         type: 'postgres',
         url: config.getOrThrow<string>('DATABASE_URL'),
         autoLoadEntities: true,
-        synchronize: config.get('NODE_ENV') !== 'production',
+        synchronize: true,
       }),
     }),
     AuthModule,
