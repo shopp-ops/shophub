@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, KeyRound, Pencil, Plus, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   shopsApi,
@@ -455,10 +455,12 @@ function ShopCard({
   shop,
   onEdit,
   onDelete,
+  onRevealCredentials,
 }: {
   shop: Shop;
   onEdit: () => void;
   onDelete: () => void;
+  onRevealCredentials: () => void;
 }) {
   return (
     <Card className="flex flex-col">
@@ -504,6 +506,17 @@ function ShopCard({
             <ExternalLink />
             Visit
           </Button>
+          {shop.phase === "Ready" && !shop.credentialsViewedAt && (
+            <Button
+              variant="outline"
+              size="icon-sm"
+              onClick={onRevealCredentials}
+              aria-label="Reveal credentials"
+              title="Reveal one-time admin & wallet credentials"
+            >
+              <KeyRound />
+            </Button>
+          )}
           <Button variant="outline" size="icon-sm" onClick={onEdit} aria-label="Edit shop">
             <Pencil />
           </Button>
@@ -592,6 +605,43 @@ export default function DashboardPage() {
   }, [token]);
 
   useEffect(() => { fetchShops(); }, [fetchShops]);
+
+  // ─── manual credentials reveal ────────────────────────────────────────────
+  // The one-time modal is normally shown right after creation, but a page
+  // refresh drops the in-memory pending ref. As long as the shop hasn't been
+  // viewed yet (credentialsViewedAt === null) the backend still serves them
+  // once, so a Ready, not-yet-viewed shop offers a manual reveal button.
+  const markViewed = useCallback((shopId: string) => {
+    setShops((prev) =>
+      prev.map((s) =>
+        s.id === shopId ? { ...s, credentialsViewedAt: new Date().toISOString() } : s,
+      ),
+    );
+  }, []);
+
+  const handleRevealCredentials = useCallback(
+    async (shopId: string) => {
+      if (!token) return;
+      try {
+        const creds = await getShopCredentials(shopId, token);
+        setCredentialsModal({
+          adminCredentials: creds.adminCredentials,
+          walletCredentials: creds.walletCredentials,
+        });
+        markViewed(shopId);
+      } catch (err) {
+        if (err instanceof CredentialsError && err.status === 410) {
+          setCredentialsModal({ adminCredentials: null, walletCredentials: null, notice: "already-retrieved" });
+          markViewed(shopId);
+        } else if (err instanceof CredentialsError && err.status === 409) {
+          setCredentialsModal({ adminCredentials: null, walletCredentials: null, notice: "not-ready" });
+        } else {
+          setError(err instanceof Error ? err.message : "Failed to fetch credentials");
+        }
+      }
+    },
+    [token, markViewed],
+  );
 
   // ─── polling loop ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -701,6 +751,7 @@ export default function DashboardPage() {
               shop={shop}
               onEdit={() => setEditingShop(shop)}
               onDelete={() => setDeletingShop(shop)}
+              onRevealCredentials={() => handleRevealCredentials(shop.id)}
             />
           ))}
         </div>

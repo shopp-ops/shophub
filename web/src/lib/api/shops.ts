@@ -10,6 +10,8 @@ export type Shop = {
   userId: string;
   createdAt: string;
   updatedAt: string;
+  /** Set once the one-time credentials have been revealed; null while still retrievable. */
+  credentialsViewedAt: string | null;
   /** Live K8s phase: Progressing | Ready | Degraded | Failed | Unknown */
   phase: string;
   statusReason: string | null;
