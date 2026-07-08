@@ -32,6 +32,11 @@ export class ShopService {
     const { namespace, crName } = buildShopIdentity(shop.id, shop.name);
     try {
       const { phase, reason, url } = await this.k8s.readShopPhase(namespace, crName);
+      const { walletAddress } = await this.k8s.readShopStatus(namespace, crName);
+      if (walletAddress && walletAddress !== shop.walletAddress) {
+        shop.walletAddress = walletAddress;
+        await this.repo.save(shop);
+      }
       return Object.assign(shop, { phase, statusReason: reason, url });
     } catch {
       return Object.assign(shop, { phase: 'Unknown', statusReason: null, url: null });
