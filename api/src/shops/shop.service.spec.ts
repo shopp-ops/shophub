@@ -234,6 +234,15 @@ describe('ShopService', () => {
       expect(view.phase).toBe('Unknown');
       expect(view.statusReason).toBeNull();
     });
+
+    it('backfills the operator-generated wallet address from the CR status', async () => {
+      const autoGenRow = { ...shopRow, walletAddress: null as string | null };
+      mockRepo.findBy.mockResolvedValue([autoGenRow]);
+      jest.spyOn(mockK8s, 'readShopStatus').mockResolvedValue({ walletAddress: '0xGENERATED' });
+      const [view] = await service.findAllByUser(autoGenRow.userId);
+      expect(view.walletAddress).toBe('0xGENERATED');
+      expect(mockRepo.save).toHaveBeenCalledWith(expect.objectContaining({ walletAddress: '0xGENERATED' }));
+    });
   });
 
   describe('getCredentials', () => {
