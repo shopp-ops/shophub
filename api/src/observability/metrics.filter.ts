@@ -16,7 +16,6 @@ export class MetricsExceptionFilter implements ExceptionFilter {
         : 500;
 
     const duration = 0;
-    console.log("dunja exception filter")
 
     this.metrics.record(req.method, req.route?.path ?? req.url, status, duration, 0);
 
