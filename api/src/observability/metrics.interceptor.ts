@@ -2,10 +2,14 @@ import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from "@nes
 import { catchError, tap } from "rxjs";
 import { throwError } from 'rxjs';
 import { MetricsService } from "./metrics.service";
+import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 @Injectable()
 export class MetricsInterceptor implements NestInterceptor {
-  constructor(private readonly metrics: MetricsService) {}
+  constructor(private readonly metrics: MetricsService,
+              @InjectPinoLogger(MetricsService.name)
+              private readonly logger: PinoLogger,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
     console.log('pogodio interceptor');
@@ -26,12 +30,6 @@ export class MetricsInterceptor implements NestInterceptor {
         const status = res.statusCode;
 
         const size = Number(res.getHeader?.('content-length') ?? 0);
-
-        console.log('METRIC INPUT', {
-                            method: req.method,
-                            route,
-                            status: res.statusCode,
-                            });
         this.metrics.record(req.method, route, status, duration, size);
       }),
 

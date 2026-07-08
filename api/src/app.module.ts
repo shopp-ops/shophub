@@ -8,6 +8,7 @@ import { KubernetesModule } from './kubernetes/kubernetes.module';
 import { ShopsModule } from './shops/shop.module';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { ObservabilityModule } from './observability/observability.module';
+import { LoggerModule } from 'nestjs-pino';
 
 @Module({
   imports: [
@@ -20,6 +21,12 @@ import { ObservabilityModule } from './observability/observability.module';
         autoLoadEntities: true,
         synchronize: config.get('NODE_ENV') !== 'production',
       }),
+    }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: 'info',
+        transport: undefined,
+      },
     }),
     AuthModule,
     KubernetesModule,
