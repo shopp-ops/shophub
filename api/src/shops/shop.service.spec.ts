@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ShopResourceService } from '../kubernetes/shop-resource.service';
+import { MetricsService } from '../observability/metrics.service';
 import { AvailabilityTier, DatabaseType, Shop } from './shop.entity';
 import { ShopService } from './shop.service';
 
@@ -23,6 +24,15 @@ const mockK8s = {
   readShopStatus: jest.fn().mockResolvedValue({ walletAddress: undefined }),
   readWalletCredentials: jest.fn().mockResolvedValue({ address: '0xgen', privateKey: '0xpriv' }),
   readShopPhase: jest.fn().mockResolvedValue({ phase: 'Progressing', reason: null }),
+};
+
+const mockMetrics = {
+  shopCreated: { inc: jest.fn() },
+  shopDeleted: { inc: jest.fn() },
+  shopFetched: { inc: jest.fn() },
+  shopDuration: { observe: jest.fn() },
+  userCreated: { inc: jest.fn() },
+  userDuration: { observe: jest.fn() },
 };
 
 const mockConfig = {
@@ -49,6 +59,7 @@ describe('ShopService', () => {
       providers: [
         ShopService,
         { provide: getRepositoryToken(Shop), useValue: mockRepo },
+        { provide: MetricsService, useValue: mockMetrics },
         { provide: ShopResourceService, useValue: mockK8s },
         { provide: ConfigService, useValue: mockConfig },
       ],
