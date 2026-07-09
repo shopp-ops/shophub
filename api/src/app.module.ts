@@ -24,7 +24,10 @@ import { LoggerModule } from 'nestjs-pino';
     }),
     LoggerModule.forRoot({
       pinoHttp: {
-        level: 'info',
+        level: process.env.LOG_LEVEL ?? 'info',
+        // Default pino-http req serializer logs all headers, which would leak the
+        // bearer JWT into every access-log line.
+        redact: ['req.headers.authorization'],
         transport: undefined,
       },
     }),

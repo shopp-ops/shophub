@@ -26,6 +26,7 @@ export class ShopResourceService {
       });
       this.logger.log(`Created Shop CR ${namespace}/${crName}`);
     } catch (error) {
+      this.logger.error(`Failed to create Shop CR ${namespace}/${crName}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -40,6 +41,8 @@ export class ShopResourceService {
         name: crName,
       });
     } catch (error) {
+      // Called on every status poll; a transient 404 during CR creation is expected.
+      this.logger.warn(`Failed to get Shop CR ${namespace}/${crName}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -67,7 +70,9 @@ export class ShopResourceService {
         },
         { middleware: [mergePatchMiddleware], middlewareMergeStrategy: 'append' },
       );
+      this.logger.log(`Patched Shop CR ${namespace}/${crName}`);
     } catch (error) {
+      this.logger.error(`Failed to patch Shop CR ${namespace}/${crName}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -105,6 +110,7 @@ export class ShopResourceService {
         password: Buffer.from(data['admin-password'] ?? '', 'base64').toString('utf8'),
       };
     } catch (error) {
+      this.logger.error(`Failed to read admin credentials for ${namespace}/${crName}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -148,6 +154,7 @@ export class ShopResourceService {
         privateKey: Buffer.from(data.privateKey ?? '', 'base64').toString('utf8'),
       };
     } catch (error) {
+      this.logger.error(`Failed to read wallet credentials for ${namespace}/${crName}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -161,7 +168,9 @@ export class ShopResourceService {
         plural: PLURAL,
         name: crName,
       });
+      this.logger.log(`Deleted Shop CR ${namespace}/${crName}`);
     } catch (error) {
+      this.logger.error(`Failed to delete Shop CR ${namespace}/${crName}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -169,7 +178,9 @@ export class ShopResourceService {
   async deleteShopNamespace(namespace: string): Promise<void> {
     try {
       await this.client.coreV1Api().deleteNamespace({ name: namespace });
+      this.logger.log(`Deleted namespace ${namespace}`);
     } catch (error) {
+      this.logger.error(`Failed to delete namespace ${namespace}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
@@ -177,8 +188,10 @@ export class ShopResourceService {
   private async ensureNamespace(name: string): Promise<void> {
     try {
       await this.client.coreV1Api().createNamespace({ body: { metadata: { name } } });
+      this.logger.log(`Created namespace ${name}`);
     } catch (error) {
       if (error instanceof ApiException && error.code === 409) return;
+      this.logger.error(`Failed to create namespace ${name}: ${(error as Error).message}`);
       throw mapK8sError(error);
     }
   }
