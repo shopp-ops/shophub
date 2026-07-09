@@ -30,9 +30,7 @@ const mockMetrics = {
   shopCreated: { inc: jest.fn() },
   shopDeleted: { inc: jest.fn() },
   shopFetched: { inc: jest.fn() },
-  shopDuration: { observe: jest.fn() },
   userCreated: { inc: jest.fn() },
-  userDuration: { observe: jest.fn() },
 };
 
 const mockConfig = {
