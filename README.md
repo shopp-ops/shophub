@@ -58,3 +58,7 @@ To connect from the API, set `DATABASE_URL` in `api/.env`:
 ```
 DATABASE_URL=postgresql://shophub:changeme@localhost:5432/shophub
 ```
+
+## Observability
+
+The API exports Prometheus metrics (`/metrics`), structured JSON logs (pino), and OpenTelemetry traces. This is self-monitoring — the per-Shop dashboards/alerts (spec §4.1) come from `shop-operator` and cover the `shop` app, not this one. See `kube-state`'s README for how to access Grafana.
