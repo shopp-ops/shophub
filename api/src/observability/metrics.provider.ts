@@ -35,22 +35,8 @@ export const metricsProviders = [
     help: 'Total number of shop fetch operations',
   }),
 
-  makeHistogramProvider({
-    name: 'shop_operation_duration_seconds',
-    help: 'Duration of shop operations',
-    labelNames: ['operation'],
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
-  }),
-
   makeCounterProvider({
     name: 'user_created_total',
     help: 'Total users created',
-  }),
-
-  makeHistogramProvider({
-    name: 'user_operation_duration_seconds',
-    help: 'Duration of user operations',
-    labelNames: ['operation'],
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
   }),
 ];

@@ -41,16 +41,9 @@ export class ShopService {
   }
 
   async findAllByUser(userId: string): Promise<ShopView[]> {
-    const start = process.hrtime();
     const shops = await this.repo.findBy({ userId });
     this.metrics.shopFetched.inc();
-    const shopsResult = await Promise.all(shops.map((s) => this.toView(s)));
-    const [sec, nano] = process.hrtime(start);
-    this.metrics.shopDuration.observe(
-      { operation: 'findAll' },
-      sec + nano / 1e9,
-    );
-    return shopsResult;
+    return Promise.all(shops.map((s) => this.toView(s)));
   }
 
   async findViewForUser(id: string, userId: string): Promise<ShopView> {
@@ -59,7 +52,6 @@ export class ShopService {
   }
 
   async getCredentials(id: string, userId: string) {
-    const start = process.hrtime();
     const shop = await this.findByIdForUser(id, userId);
     const { namespace, crName } = buildShopIdentity(shop.id, shop.name);
     const { phase } = await this.k8s.readShopPhase(namespace, crName);
@@ -74,28 +66,18 @@ export class ShopService {
     const walletCredentials = await this.resolveWallet(shop, autoGenerate, namespace, crName);
     shop.credentialsViewedAt = new Date();
     await this.repo.save(shop);
-    const [sec, nano] = process.hrtime(start);
-    this.metrics.shopDuration.observe(
-      { operation: 'getCredentials' },
-      sec + nano / 1e9,
-    );
     return { shop, adminCredentials, walletCredentials };
   }
 
   async create(userId: string, dto: CreateShopDto): Promise<CreateShopResult> {
-    const start = process.hrtime();
     const saved = await this.repo.save(this.repo.create({ ...dto, userId }));
-    this.metrics.shopCreated.inc();
     try {
       await this.k8s.createShop(toShopManifest(saved, this.manifestConfig()));
     } catch (error) {
       await this.rollback(() => this.repo.remove(saved), error);
     }
-    const [sec, nano] = process.hrtime(start);
-    this.metrics.shopDuration.observe(
-      { operation: 'create' },
-      sec + nano / 1e9,
-    );
+    // Count only successful creations — rollback above rethrows on failure.
+    this.metrics.shopCreated.inc();
     return { shop: saved };
   }
 
@@ -139,23 +121,20 @@ export class ShopService {
   }
 
   async remove(id: string, userId: string): Promise<void> {
-    const start = process.hrtime();
     const shop = await this.findByIdForUser(id, userId);
     const original = { ...shop };
     const { namespace } = buildShopIdentity(shop.id, shop.name);
     await this.repo.remove(shop);
-    this.metrics.shopDeleted.inc();
     try {
       await this.k8s.deleteShopNamespace(namespace);
     } catch (error) {
-      if (error instanceof NotFoundException) return;
-      await this.rollback(() => this.repo.save(original), error);
+      // A missing namespace means the shop is already gone — treat as deleted.
+      if (!(error instanceof NotFoundException)) {
+        await this.rollback(() => this.repo.save(original), error);
+      }
     }
-    const [sec, nano] = process.hrtime(start);
-    this.metrics.shopDuration.observe(
-      { operation: 'delete' },
-      sec + nano / 1e9,
-    );
+    // Count only successful deletions — rollback above rethrows on other failures.
+    this.metrics.shopDeleted.inc();
   }
 
   private manifestConfig(): ShopManifestConfig {
