@@ -66,6 +66,7 @@ export class ShopService {
     const walletCredentials = await this.resolveWallet(shop, autoGenerate, namespace, crName);
     shop.credentialsViewedAt = new Date();
     await this.repo.save(shop);
+    this.logger.log(`Credentials revealed for shop ${shop.id} by user ${userId}`);
     return { shop, adminCredentials, walletCredentials };
   }
 
@@ -78,6 +79,7 @@ export class ShopService {
     }
     // Count only successful creations — rollback above rethrows on failure.
     this.metrics.shopCreated.inc();
+    this.logger.log(`Shop created: ${saved.id} (${saved.name}) by user ${userId}`);
     return { shop: saved };
   }
 
@@ -117,6 +119,7 @@ export class ShopService {
         await this.rollback(() => this.repo.save(original), error);
       }
     }
+    this.logger.log(`Shop updated: ${shop.id} by user ${userId} (fields: ${Object.keys(dto).join(', ') || 'none'})`);
     return updated;
   }
 
@@ -135,6 +138,7 @@ export class ShopService {
     }
     // Count only successful deletions — rollback above rethrows on other failures.
     this.metrics.shopDeleted.inc();
+    this.logger.log(`Shop deleted: ${shop.id} by user ${userId}`);
   }
 
   private manifestConfig(): ShopManifestConfig {
