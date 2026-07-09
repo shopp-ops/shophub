@@ -10,7 +10,7 @@ import { CreateShopResult } from './create-shop-result.interface';
 import { ShopManifestConfig, mapUpdateToSpec, toShopManifest } from './shop-manifest.mapper';
 import { Shop } from './shop.entity';
 import { ShopView } from './shop-view.interface';
-import { MetricsService } from 'src/observability/metrics.service';
+import { MetricsService } from '../observability/metrics.service';
 
 @Injectable()
 export class ShopService {
@@ -49,7 +49,7 @@ export class ShopService {
     const start = process.hrtime();
     const shops = await this.repo.findBy({ userId });
     this.metrics.shopFetched.inc();
-    const shopsResult = Promise.all(shops.map((s) => this.toView(s)));
+    const shopsResult = await Promise.all(shops.map((s) => this.toView(s)));
     const [sec, nano] = process.hrtime(start);
     this.metrics.shopDuration.observe(
       { operation: 'findAll' },
@@ -158,7 +158,7 @@ export class ShopService {
     }
     const [sec, nano] = process.hrtime(start);
     this.metrics.shopDuration.observe(
-      { operation: 'create' },
+      { operation: 'delete' },
       sec + nano / 1e9,
     );
   }
