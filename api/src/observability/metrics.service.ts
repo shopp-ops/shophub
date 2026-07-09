@@ -1,6 +1,5 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
-import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Counter, Histogram } from 'prom-client';
 
 @Injectable()
@@ -32,24 +31,10 @@ export class MetricsService {
 
     @InjectMetric('user_operation_duration_seconds')
     public userDuration: Histogram<string>,
-
-    @InjectPinoLogger(MetricsService.name)
-    private readonly logger: PinoLogger,
   ) {}
 
   record(method: string, route: string, status: number, durationSeconds: number, responseSize: number) {
     const labels = { method, route, status: status.toString() };
-    //console.log('INC LABELS', labels);
-    this.logger.info({
-      msg: 'INC LABEL',
-      labels
-    });
-    this.logger.info({
-      msg: 'METRIC INPUT',
-      method,
-      route,
-      status,
-    });
     this.requests.inc(labels);
     this.duration.observe(labels, durationSeconds);
     this.responseSize.inc({ route }, responseSize);

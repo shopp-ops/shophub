@@ -1,49 +1,42 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from "@nestjs/common";
-import { catchError, tap } from "rxjs";
-import { throwError } from 'rxjs';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, HttpException } from "@nestjs/common";
+import { catchError, tap, throwError } from "rxjs";
 import { MetricsService } from "./metrics.service";
-import { InjectPinoLogger, PinoLogger } from "nestjs-pino";
 
 @Injectable()
 export class MetricsInterceptor implements NestInterceptor {
-  constructor(private readonly metrics: MetricsService,
-              @InjectPinoLogger(MetricsService.name)
-              private readonly logger: PinoLogger,
-  ) {}
+  constructor(private readonly metrics: MetricsService) {}
 
   intercept(context: ExecutionContext, next: CallHandler) {
-    console.log('pogodio interceptor');
     const start = process.hrtime();
 
     const req = context.switchToHttp().getRequest();
     const res = context.switchToHttp().getResponse();
 
+    // The Prometheus endpoint is served by the adapter, not a Nest route — skip it.
+    if ((req.url ?? '').startsWith('/metrics')) return next.handle();
+
+    // Matched route pattern only — never the raw URL, which carries IDs and would
+    // explode Prometheus label cardinality (especially on 404s).
+    const route: string =
+      req.routeOptions?.url ?? req.routerPath ?? req.route?.path ?? 'unmatched';
+
+    const elapsed = () => {
+      const [sec, nano] = process.hrtime(start);
+      return sec + nano / 1e9;
+    };
+
     return next.handle().pipe(
       tap(() => {
-        const [sec, nano] = process.hrtime(start);
-        const duration = sec + nano / 1e9;
-
-        const route = req.route?.path ?? req.url;
-
-        if (route === '/metrics') return;
-
-        const status = res.statusCode;
-
         const size = Number(res.getHeader?.('content-length') ?? 0);
-        this.metrics.record(req.method, route, status, duration, size);
+        this.metrics.record(req.method, route, res.statusCode, elapsed(), size);
       }),
-
-      /*catchError((err) => {
-        const [sec, nano] = process.hrtime(start);
-        const duration = sec + nano / 1_000_000_000;
-        const route = req.route?.path ?? req.url;
-
-        const status = err?.status || err?.statusCode || 500;
-
-        this.metrics.record(req.method, route, status, duration, 0);
-
+      // Record failures too, then rethrow so Nest's default filter builds the response.
+      catchError((err) => {
+        const status =
+          err instanceof HttpException ? err.getStatus() : (err?.status ?? err?.statusCode ?? 500);
+        this.metrics.record(req.method, route, status, elapsed(), 0);
         return throwError(() => err);
-     }),*/
+      }),
     );
   }
 }
