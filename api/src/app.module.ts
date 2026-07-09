@@ -29,6 +29,16 @@ import { LoggerModule } from 'nestjs-pino';
         // bearer JWT into every access-log line.
         redact: ['req.headers.authorization'],
         transport: undefined,
+        serializers: {
+          req(req) {
+            return {
+              method: req.method,
+              url: req.url,
+              userAgent: req.headers['user-agent'],
+              ip: req.headers['x-forwarded-for'] ?? req.ip,
+            };
+          },
+        },
       },
     }),
     AuthModule,
